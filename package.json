@@ -1,8 +1,16 @@
 {
   "name": "bun-qr",
-  "module": "index.ts",
+  "version": "0.1.0",
+  "description": "High-performance QR code generator with link encoding utilities for Bun runtime",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./links": "./src/links.ts",
+    "./decode": "./src/decode.ts",
+    "./dom": "./src/dom.ts"
+  },
   "devDependencies": { "@types/bun": "latest" },
   "peerDependencies": { "typescript": "^5" }
 }
