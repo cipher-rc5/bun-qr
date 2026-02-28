@@ -1,3 +1,4 @@
+```md
 bun-qr/
 |
 |- Configuration
