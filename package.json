@@ -11,6 +11,10 @@
     "./decode": "./src/decode.ts",
     "./dom": "./src/dom.ts"
   },
-  "devDependencies": { "@types/bun": "latest" },
-  "peerDependencies": { "typescript": "^5" }
+  "devDependencies": {
+    "@types/bun": "^1.3.9"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  }
 }

@@ -2,27 +2,27 @@
 
 ```
 bun-qr/
-├── 📄 package.json                 # Bun-optimized package configuration
-├── 📄 tsconfig.json                # TypeScript configuration for Bun
-├── 📄 README.md                    # Project documentation
-├── 📄 .gitignore                   # Git ignore patterns
-├── 📄 TREE.md                      # This file - project structure
+├──  package.json                 # Bun-optimized package configuration
+├──  tsconfig.json                # TypeScript configuration for Bun
+├──  README.md                    # Project documentation
+├──  .gitignore                   # Git ignore patterns
+├──  TREE.md                      # This file - project structure
 │
-├── 📁 src/                         # Source code
-│   ├── 📄 index.ts                 # Main QR encoder (snake_case API)
-│   ├── 📄 decode.ts                # QR decoder module (TODO)
-│   └── 📄 dom.ts                   # Browser/DOM utilities (TODO)
+├──  src/                         # Source code
+│   ├──  index.ts                 # Main QR encoder (snake_case API)
+│   ├──  decode.ts                # QR decoder module (TODO)
+│   └──  dom.ts                   # Browser/DOM utilities (TODO)
 │
-├── 📁 examples/                    # Usage examples
-│   ├── 📄 basic.ts                 # Basic encoding examples
-│   └── 📁 output/                  # Example output directory
+├──  examples/                    # Usage examples
+│   ├──  basic.ts                 # Basic encoding examples
+│   └──  output/                  # Example output directory
 │
-├── 📁 test/                        # Test suite
-│   ├── 📄 index.test.ts            # Unit tests (TODO)
-│   └── 📁 fixtures/                # Test fixtures (TODO)
+├──  test/                        # Test suite
+│   ├──  index.test.ts            # Unit tests (TODO)
+│   └──  fixtures/                # Test fixtures (TODO)
 │
-└── 📁 dist/                        # Build output (generated)
-    └── 📄 index.js                 # Compiled bundle
+└──  dist/                        # Build output (generated)
+    └──  index.js                 # Compiled bundle
 
 Key Changes from Original:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
