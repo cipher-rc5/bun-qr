@@ -1,0 +1,28 @@
+{
+  "cases": [
+    {
+      "id": "ascii-hello-bun-qr",
+      "input": "Hello, Bun QR!",
+      "output": "ascii",
+      "expected": { "length": 338, "sha256": "45d0dce9fca184455d9e5a25dc117cbacc559ef9efb1a0602500a6d756249c64" }
+    },
+    {
+      "id": "ascii-url-bun",
+      "input": "https://bun.com/",
+      "output": "ascii",
+      "expected": { "length": 450, "sha256": "c1f1943e9f0aaebe26e0133b080b67852f239dc7151c87c332c0fe7ccdac7013" }
+    },
+    {
+      "id": "svg-url-bun",
+      "input": "https://bun.com/",
+      "output": "svg",
+      "expected": { "length": 4041, "sha256": "6b99c3811cf0497937ec3aaa47b714c89f542b4c6bab9036098b97cfa79dd051" }
+    },
+    {
+      "id": "gif-url-bun",
+      "input": "https://bun.com/",
+      "output": "gif",
+      "expected": { "length": 1267, "sha256": "0498acc8b0209f405b7433dd13d56a7e7dbea80fe0428ea6f747232f41b78181" }
+    }
+  ]
+}

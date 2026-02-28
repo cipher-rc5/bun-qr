@@ -5,7 +5,7 @@ import type { CliArgs, OutputPresenter, QrGenerator, UrlNormalizer } from './typ
 import { DefaultUrlNormalizer } from './url-normalizer';
 
 export class QrCliApplication {
-  constructor(
+  constructor (
     private readonly normalizer: UrlNormalizer = new DefaultUrlNormalizer(),
     private readonly generator: QrGenerator = new BunQrGenerator(),
     private readonly presenter: OutputPresenter = new BunTerminalPresenter()

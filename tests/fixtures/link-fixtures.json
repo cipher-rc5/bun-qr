@@ -1,0 +1,11 @@
+{
+  "url": { "input": "bun.com", "expected": "https://bun.com" },
+  "email": {
+    "input": { "address": "hello@example.com", "options": { "subject": "Hi", "body": "From bun-qr" } },
+    "expected": "mailto:hello@example.com?subject=Hi&body=From%20bun-qr"
+  },
+  "wifi": {
+    "input": { "ssid": "BunNet", "password": "secret123", "security": "WPA" },
+    "expected": "WIFI:T:WPA;S:BunNet;P:secret123;;"
+  }
+}

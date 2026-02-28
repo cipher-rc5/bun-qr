@@ -1,104 +1,73 @@
 # bun-qr Project Structure
 
-```
+## Top-level layout
+
+```text
 bun-qr/
-├──  package.json                 # Bun-optimized package configuration
-├──  tsconfig.json                # TypeScript configuration for Bun
-├──  README.md                    # Project documentation
-├──  .gitignore                   # Git ignore patterns
-├──  TREE.md                      # This file - project structure
-│
-├──  src/                         # Source code
-│   ├──  index.ts                 # Main QR encoder (snake_case API)
-│   ├──  decode.ts                # QR decoder module (TODO)
-│   └──  dom.ts                   # Browser/DOM utilities (TODO)
-│
-├──  examples/                    # Usage examples
-│   ├──  basic.ts                 # Basic encoding examples
-│   └──  output/                  # Example output directory
-│
-├──  test/                        # Test suite
-│   ├──  index.test.ts            # Unit tests (TODO)
-│   └──  fixtures/                # Test fixtures (TODO)
-│
-└──  dist/                        # Build output (generated)
-    └──  index.js                 # Compiled bundle
-
-Key Changes from Original:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✓ Runtime: Node.js → Bun (native APIs)
-✓ API Style: camelCase → snake_case (Rust compatibility)
-✓ Text Encoding: TextEncoder (Bun native)
-✓ File I/O: fs/promises → Bun.write/Bun.file
-✓ Package Manager: npm → bun
-✓ Build System: tsc → bun build
-✓ Test Runner: node → bun test
-✓ Zero dependencies maintained
+|- .github/
+|  `- workflows/
+|     `- ci.yml
+|- docs/
+|  |- CHANGELOG.md
+|  |- structure.md
+|  |- summary.md
+|  `- tree.md
+|- examples/
+|  |- basic.ts
+|  |- links.ts
+|  `- output/
+|- src/
+|  |- cli/
+|  |  |- app.ts
+|  |  |- args-parser.ts
+|  |  |- qr-generator.ts
+|  |  |- terminal-presenter.ts
+|  |  |- types.ts
+|  |  `- url-normalizer.ts
+|  |- core/
+|  |  |- bitmap.ts
+|  |  |- encoder.ts
+|  |  |- error-correction.ts
+|  |  |- layout.ts
+|  |  `- penalty.ts
+|  |- cli.ts
+|  |- decode.ts
+|  |- dom.ts
+|  |- index.ts
+|  `- links.ts
+|- tests/
+|  |- benchmark.ts
+|  |- cli.app.test.ts
+|  |- cli.args.test.ts
+|  |- index.test.ts
+|  `- fixtures/
+|- package.json
+|- tsconfig.json
+`- bun.lock
 ```
 
-## Module Overview
+## Module responsibilities
 
-### Core Modules
+- `src/index.ts`: stable public API surface and orchestration.
+- `src/core/*`: isolated QR internals (encoding, layout, penalty, bitmap, ECC).
+- `src/cli/*`: CLI layers separated by concern (parse, normalize, generate, present).
+- `src/links.ts`: structured payload helpers for common QR data formats.
+- `tests/fixtures/*`: deterministic fixture data for regression tests.
 
-**src/index.ts**
+## Engineering conventions
 
-- Main QR code encoder
-- Exports: `encode_qr()`, `Bitmap`, `utils`
-- Optimized for Bun runtime
-- Snake_case naming convention
-- Zero external dependencies
+- Runtime/tooling/package manager: Bun
+- API style: snake_case for core QR API compatibility style
+- Type system: strict TypeScript with no implicit unsafety
+- Validation strategy:
+  - typecheck via `bun run typecheck`
+  - tests via `bun test`
+  - benchmarks via `bun run bench`
 
-**src/decode.ts** (Planned)
+## CI
 
-- QR code decoder/reader
-- Image processing utilities
-- Pattern detection algorithms
+`/.github/workflows/ci.yml` runs:
 
-**src/dom.ts** (Planned)
-
-- Browser canvas integration
-- Camera access for QR scanning
-- DOM manipulation helpers
-
-### Performance Optimizations
-
-1. **Bun Native APIs**
-   - Direct use of Bun's TextEncoder/TextDecoder
-   - Optimized file I/O with Bun.write/Bun.file
-   - Fast TypeScript compilation
-
-2. **Memory Efficiency**
-   - Uint8Array for byte operations
-   - Efficient bitmap representation
-   - Minimal memory allocations
-
-3. **Algorithm Optimizations**
-   - Galois Field lookup tables
-   - Reed-Solomon error correction
-   - Optimized penalty calculations
-
-## Usage
-
-```bash
-# Install dependencies
-bun install
-
-# Run examples
-bun run examples/basic.ts
-
-# Run tests
-bun test
-
-# Build for production
-bun run build
-```
-
-## File Header Template
-
-All source files use this template:
-
-```typescript
-// file: {file_path}
-// description: {description}
-// reference: {reference}
-```
+1. `bun install --frozen-lockfile`
+2. `bun run typecheck`
+3. `bun test`

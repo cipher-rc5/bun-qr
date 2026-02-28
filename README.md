@@ -1,17 +1,20 @@
 # bun-qr
 
-High-performance QR code generator and reader built exclusively for Bun runtime. Zero dependencies, ultra-fast, with support for multiple output formats and built-in link encoding utilities.
+High-performance QR code generator built exclusively for Bun runtime. Zero dependencies, strict TypeScript, with multiple output formats, CLI support, and built-in link encoding utilities.
 
 ## Features
 
 - Zero dependencies
-- Built for Bun's high-performance runtime
+- Built for Bun runtime, APIs, and package manager
+- Strict type-safe TypeScript configuration
 - QR code generation (encoding)
-- QR code reading (decoding)
+- CLI for URL -> QR generation (`bun-qr`)
+- Bun-native terminal colorization with `Bun.color()`
 - **Link & data encoding utilities** for URLs, emails, WiFi, vCards, and more
 - Multiple output formats: ASCII, Terminal, SVG, GIF, Raw
 - Snake_case API for Rust compatibility
 - Comprehensive error correction support
+- CI with Bun typecheck + test
 
 ## Installation
 
@@ -32,6 +35,51 @@ bun run qr -- https://bun.sh --format term
 - Supports `svg`, `gif`, `ascii`, and `term` outputs
 - Uses Bun-native colorized terminal messages via `Bun.color()`
 - Auto-normalizes URLs by adding `https://` when missing
+
+You can also run the binary name directly after install:
+
+```bash
+bun-qr https://bun.com --format svg --output bun.svg
+```
+
+## Development
+
+```bash
+bun install
+bun run typecheck
+bun test
+bun run bench
+```
+
+- `typecheck`: strict TypeScript validation
+- `test`: unit and fixture regression tests
+- `bench`: Bun runtime benchmark suite
+
+## Architecture
+
+The core encoder has been separated by concern (SOLID-oriented modules):
+
+- `src/core/bitmap.ts`: bitmap model and output format renderers
+- `src/core/layout.ts`: QR template drawing, patterns, zigzag placement
+- `src/core/error-correction.ts`: GF math + Reed-Solomon + interleaving
+- `src/core/encoder.ts`: payload type detection and bitstream encoding
+- `src/core/penalty.ts`: mask penalty scoring
+- `src/index.ts`: public API facade and orchestration
+
+## Fixtures, Tests, and Benchmarks
+
+- Deterministic fixtures live in `tests/fixtures/`
+- QR fixture tests validate output length + SHA-256 stability
+- Link fixture tests validate canonical URL/email/WiFi encodings
+- Benchmarks are defined in `tests/benchmark.ts` and run with `bun run bench`
+
+## CI
+
+GitHub Actions workflow at `.github/workflows/ci.yml` runs on push/PR:
+
+- `bun install --frozen-lockfile`
+- `bun run typecheck`
+- `bun test`
 
 ## Quick Start
 
@@ -112,6 +160,8 @@ const geo_qr = encode_qr(location, 'svg');
 - **Bitcoin**: Payment requests
 
 ## Decoding QR Codes
+
+Decoder APIs are currently scaffolded and not fully implemented yet.
 
 ```typescript
 import { decode_qr } from 'bun-qr/decode';

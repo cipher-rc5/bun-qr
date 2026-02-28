@@ -7,7 +7,7 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
   let format: CliOutputFormat = 'svg';
   const positional: string[] = [];
 
-  for (let i = 0; i < argv.length; i++) {
+  for (let i = 0;i < argv.length;i++) {
     const arg = argv[i];
 
     if (arg === '--help' || arg === '-h') {
