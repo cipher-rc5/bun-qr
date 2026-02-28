@@ -3,7 +3,7 @@
 // reference: https://github.com/cipher-rc5/bun-qr
 
 import { type DecodeOpts, type FinderPoints } from './decode';
-import { type Image } from './index';
+import { type Image as QrImage } from './index';
 
 // Get element dimensions
 export const get_size = (elm: HTMLElement): { width: number, height: number } => {

@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "High-performance QR code generator with link encoding utilities for Bun runtime",
   "module": "src/index.ts",
+  "bin": {
+    "bun-qr": "./src/cli.ts"
+  },
   "type": "module",
   "private": true,
   "exports": {
@@ -13,6 +16,10 @@
   },
   "devDependencies": {
     "@types/bun": "^1.3.9"
+  },
+  "scripts": {
+    "typecheck": "bunx tsc --noEmit",
+    "qr": "bun run ./src/cli.ts"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"

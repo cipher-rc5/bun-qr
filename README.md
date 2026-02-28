@@ -19,6 +19,20 @@ High-performance QR code generator and reader built exclusively for Bun runtime.
 bun add bun-qr
 ```
 
+## CLI
+
+Generate QR codes from URLs directly from the terminal using Bun runtime and APIs:
+
+```bash
+bun run qr -- https://bun.com
+bun run qr -- bun.com --format gif --output bun.gif
+bun run qr -- https://bun.sh --format term
+```
+
+- Supports `svg`, `gif`, `ascii`, and `term` outputs
+- Uses Bun-native colorized terminal messages via `Bun.color()`
+- Auto-normalizes URLs by adding `https://` when missing
+
 ## Quick Start
 
 ```typescript

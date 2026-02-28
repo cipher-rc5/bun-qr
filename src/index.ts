@@ -907,8 +907,8 @@ const GF = {
     coefficients[0] = coefficient;
     return GF.polynomial(coefficients);
   },
-  degree: (a: number[]) => a.length - 1,
-  coefficient: (a: any, degree: number) => a[GF.degree(a) - degree],
+  degree: (a: readonly number[]) => a.length - 1,
+  coefficient: (a: readonly number[], degree: number) => a[GF.degree(a) - degree] ?? 0,
   mul_poly(a: number[], b: number[]) {
     if (a[0] === 0 || b[0] === 0) return [0];
     const res = fill_arr(a.length + b.length - 1, 0);
@@ -964,7 +964,7 @@ const GF = {
     for (let i = 0;i < degree;i++) g = GF.mul_poly(g, [1, GF.pow(2, i)]);
     return g;
   },
-  eval_poly(poly: any, a: number) {
+  eval_poly(poly: readonly number[], a: number) {
     if (a == 0) return GF.coefficient(poly, 0);
     let res = poly[0];
     for (let i = 1;i < poly.length;i++) res = GF.add(GF.mul(a, res), poly[i]);
