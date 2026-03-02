@@ -1,6 +1,8 @@
 # bun-qr
 
-High-performance QR code generator built exclusively for Bun runtime. Zero dependencies, strict TypeScript, with multiple output formats, CLI support, and built-in link encoding utilities.
+Codebase forked from the work of [paulmillr](https://github.com/paulmillr). Original codebase is available [https://github.com/paulmillr/qr](https://github.com/paulmillr/qr).  
+
+QR code generator built using the bun runtime. Zero dependencies, strict TypeScript, with multiple output formats, CLI support, and built-in link encoding utilities. Instance is a fork of the work 
 
 ## Features
 
@@ -19,7 +21,9 @@ High-performance QR code generator built exclusively for Bun runtime. Zero depen
 ## Installation
 
 ```bash
-bun add bun-qr
+git clone https://github.com/cipher-rc5/bun-qr.git
+cd bun-qr
+bun install
 ```
 
 ## CLI
