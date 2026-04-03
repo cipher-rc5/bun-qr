@@ -1,7 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { unlink } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { QrCliApplication } from '../src/cli/app';
 import type { CliOutputFormat, OutputPresenter, QrGenerator, UrlNormalizer } from '../src/cli/types';
 
@@ -64,7 +61,7 @@ describe('QrCliApplication', () => {
   test('writes svg file and reports destination', async () => {
     const presenter = new MockPresenter();
     const app = new QrCliApplication(new PrefixNormalizer(), new FixedGenerator('<svg></svg>'), presenter);
-    const outputPath = join(tmpdir(), `bun-qr-cli-${crypto.randomUUID()}.svg`);
+    const outputPath = `${Bun.env.TMPDIR ?? '/tmp'}/bun-qr-cli-${crypto.randomUUID()}.svg`;
 
     const code = await app.run(['bun.com', '--format', 'svg', '--output', outputPath]);
 
@@ -74,7 +71,7 @@ describe('QrCliApplication', () => {
     const content = await Bun.file(outputPath).text();
     expect(content).toBe('<svg></svg>');
 
-    await unlink(outputPath);
+    await Bun.file(outputPath).delete();
   });
 
   test('returns 1 on invalid cli input', async () => {
