@@ -35,11 +35,13 @@ console.log('First row:', raw_qr[0]?.slice(0, 10), '...');
 
 // 6. Different error correction levels
 console.log('\n6. Error Correction Levels:');
-const ecc_low = encode_qr('Low ECC', 'svg', { ecc: 'low' });
-const ecc_medium = encode_qr('Medium ECC', 'svg', { ecc: 'medium' });
-const ecc_quartile = encode_qr('Quartile ECC', 'svg', { ecc: 'quartile' });
-const ecc_high = encode_qr('High ECC', 'svg', { ecc: 'high' });
-console.log('✓ Generated QR codes with all ECC levels');
+const ecc_sizes = [
+  encode_qr('Low ECC', 'svg', { ecc: 'low' }).length,
+  encode_qr('Medium ECC', 'svg', { ecc: 'medium' }).length,
+  encode_qr('Quartile ECC', 'svg', { ecc: 'quartile' }).length,
+  encode_qr('High ECC', 'svg', { ecc: 'high' }).length
+];
+console.log(`✓ Generated QR codes with all ECC levels (SVG lengths: ${ecc_sizes.join(', ')})`);
 
 // 7. Custom border and scale
 console.log('\n7. Custom Options:');

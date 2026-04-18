@@ -129,6 +129,15 @@ const GF = {
     for (let i = 1;i < poly.length;i++) res = GF.add(GF.mul(a, res), poly[i]);
     return res;
   },
+  /**
+   * Extended Euclidean algorithm over GF(2^8), used for Berlekamp-Welch error correction.
+   *
+   * Computes the error locator polynomial σ(x) and error evaluator polynomial Ω(x) from the
+   * syndrome polynomial. The parameter R is the number of ECC codewords; the algorithm
+   * terminates when deg(r) < R/2, yielding [σ, Ω] normalized so that σ(0) = 1.
+   *
+   * Reference: ISO/IEC 18004:2015 Annex A; Berlekamp-Welch decoding algorithm.
+   */
   euclidian(a: number[], b: number[], R: number) {
     if (GF.degree(a) < GF.degree(b)) [a, b] = [b, a];
     let r_last = a;
@@ -258,3 +267,7 @@ export function create_interleaver(capacity: CapacityInfo): Coder<Uint8Array, Ui
     }
   };
 }
+
+// Internal exports for unit testing — do not use in application code
+export const _tests = { GF, RS };
+

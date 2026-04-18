@@ -2,15 +2,19 @@
 // description: Browser and DOM utilities for QR scanning
 // reference: https://github.com/cipher-rc5/bun-qr
 
-import { type DecodeOpts, type FinderPoints } from './decode';
-import { type Image as QrImage } from './index';
 
-// Get element dimensions
+// Get element dimensions from computed style
 export const get_size = (elm: HTMLElement): { width: number, height: number } => {
   const css = getComputedStyle(elm);
-  const width = Math.floor(+css.width.split('px')[0]);
-  const height = Math.floor(+css.height.split('px')[0]);
-  return { width, height };
+  const width = parseFloat(css.width);
+  const height = parseFloat(css.height);
+  if (!isFinite(width) || width <= 0) {
+    throw new Error(`get_size: could not read element width (got "${css.width}"). Ensure the element is attached to the DOM and has a resolved layout.`);
+  }
+  if (!isFinite(height) || height <= 0) {
+    throw new Error(`get_size: could not read element height (got "${css.height}"). Ensure the element is attached to the DOM and has a resolved layout.`);
+  }
+  return { width: Math.floor(width), height: Math.floor(height) };
 };
 
 // Canvas options for QR display
@@ -29,7 +33,7 @@ export type QRCanvasElements = { overlay?: HTMLCanvasElement, bitmap?: HTMLCanva
 
 // QR Canvas handler class
 export class QRCanvas {
-  constructor (elements?: QRCanvasElements, opts?: Partial<QRCanvasOpts>) {
+  constructor (_elements?: QRCanvasElements, _opts?: Partial<QRCanvasOpts>) {
     throw new Error('QRCanvas not yet implemented. Coming soon!');
   }
 }

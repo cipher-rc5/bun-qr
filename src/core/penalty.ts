@@ -169,3 +169,12 @@ export function calculate_penalty(bitmap: Bitmap): number {
 
   return run_penalty + block_penalty + finder_penalty + balance_penalty;
 }
+
+// Internal exports for unit testing — do not use in application code
+export const _tests = {
+  calculate_row_run_penalty,
+  calculate_column_run_penalty,
+  calculate_row_finder_penalty,
+  calculate_column_finder_penalty
+};
+

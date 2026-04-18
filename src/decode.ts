@@ -19,7 +19,9 @@ export type DecodeOpts = {
 };
 
 // Decode QR code from image
-export function decode_qr(img: QrImage, opts: DecodeOpts = {}): string {
+// NOTE: Not yet implemented — importing this module will not cause a build error,
+// but calling decode_qr() at runtime throws. Remove from exports map until complete.
+export function decode_qr(_img: QrImage, _opts: DecodeOpts = {}): string {
   throw new Error('QR decoder not yet implemented. Coming soon!');
 }
 

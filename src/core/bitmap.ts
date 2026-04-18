@@ -8,6 +8,13 @@ type ReadFn = (c: Point, curr: DrawValue) => void;
 
 const ch_codes = { newline: 10, reset: 27 };
 
+/**
+ * Maximum pixel area (width × height) for raster output methods (to_gif, to_image).
+ * Guards against excessive memory allocation from large version + scale combinations.
+ * At scale 1, version 40 QR codes are 177×177 = 31,329 pixels — well within this limit.
+ */
+export const MAX_QR_PIXELS = 16_000_000; // 4000×4000
+
 function mod(a: number, b: number): number {
   const result = a % b;
   return result >= 0 ? result : b + result;
@@ -15,6 +22,85 @@ function mod(a: number, b: number): number {
 
 function fill_arr<T>(length: number, val: T): T[] {
   return new Array(length).fill(val);
+}
+
+/**
+ * LZW encoder for GIF output (2-color images only: pixel values 0 or 1).
+ *
+ * Implements GIF LZW compression per the Compuserve GIF89a spec with minimum
+ * code size = 2 (the GIF-mandated minimum). Bit-packs codes LSB-first into
+ * output bytes and handles table-full resets at the 4096-code limit.
+ */
+function lzw_encode_gif(pixels: readonly number[]): number[] {
+  const MIN_CODE_SIZE = 2;
+  const CLEAR_CODE = 1 << MIN_CODE_SIZE; // 4
+  const EOI_CODE = CLEAR_CODE + 1; // 5
+  const MAX_CODE = 4096;
+
+  // Dictionary keyed by (prefix * 2 + symbol). For 2-color images, symbol ∈ {0,1}.
+  // Max key = (MAX_CODE-1)*2 + 1 = 8191, so size 8192 covers the full range.
+  const dict = new Int16Array(8192).fill(-1);
+
+  let code_size = MIN_CODE_SIZE + 1; // 3 bits initially
+  let next_code = EOI_CODE + 1; // 6
+
+  const out: number[] = [];
+  let bit_buf = 0;
+  let bit_count = 0;
+
+  const write_code = (code: number): void => {
+    bit_buf |= code << bit_count;
+    bit_count += code_size;
+    while (bit_count >= 8) {
+      out.push(bit_buf & 0xff);
+      bit_buf >>>= 8;
+      bit_count -= 8;
+    }
+  };
+
+  const reset_dict = (): void => {
+    dict.fill(-1);
+    code_size = MIN_CODE_SIZE + 1;
+    next_code = EOI_CODE + 1;
+  };
+
+  write_code(CLEAR_CODE);
+
+  if (pixels.length === 0) {
+    write_code(EOI_CODE);
+    if (bit_count > 0) out.push(bit_buf & 0xff);
+    return out;
+  }
+
+  let prefix = pixels[0]!;
+
+  for (let i = 1;i < pixels.length;i++) {
+    const sym = pixels[i]!; // 0 or 1
+    const key = (prefix << 1) | sym;
+    const found = dict[key];
+
+    if (found !== -1) {
+      prefix = found;
+    } else {
+      write_code(prefix);
+      if (next_code < MAX_CODE) {
+        dict[key] = next_code++;
+        // Increase code size before the next code overflows current bit width
+        if (next_code >= (1 << code_size) && code_size < 12) code_size++;
+      } else {
+        // Table full: emit clear code and reset dictionary
+        write_code(CLEAR_CODE);
+        reset_dict();
+      }
+      prefix = sym;
+    }
+  }
+
+  write_code(prefix);
+  write_code(EOI_CODE);
+  if (bit_count > 0) out.push(bit_buf & 0xff);
+
+  return out;
 }
 
 export class Bitmap {
@@ -220,47 +306,70 @@ export class Bitmap {
     return out;
   }
 
+  /**
+   * Render the bitmap as a GIF image using LZW compression (GIF87a, 2-color palette).
+   * @throws if the pixel area exceeds MAX_QR_PIXELS
+   */
   to_gif(): Uint8Array {
-    const u16_le = (i: number) => [i & 0xff, (i >>> 8) & 0xff];
-    const dims = [...u16_le(this.width), ...u16_le(this.height)];
-    const data: number[] = [];
-    this.rect_read(0, Infinity, (_, cur) => data.push(+(cur === true)));
-    const N = 126;
-    const bytes = [
-      0x47,
-      0x49,
-      0x46,
-      0x38,
-      0x37,
-      0x61,
-      ...dims,
-      0xf6,
-      0x00,
-      0x00,
-      0xff,
-      0xff,
-      0xff,
-      ...fill_arr(3 * 127, 0x00),
-      0x2c,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      ...dims,
-      0x00,
-      0x07
-    ];
-    const full_chunks = Math.floor(data.length / N);
-    for (let i = 0;i < full_chunks;i++) {
-      bytes.push(N + 1, 0x80, ...data.slice(N * i, N * (i + 1)).map((i) => +i));
+    const { width, height } = this;
+    const total_pixels = width * height;
+    if (total_pixels > MAX_QR_PIXELS) {
+      throw new Error(
+        `QR output too large: ${width}×${height} = ${total_pixels} pixels. Maximum is ${MAX_QR_PIXELS}. Reduce scale or version.`
+      );
     }
-    bytes.push((data.length % N) + 1, 0x80, ...data.slice(full_chunks * N).map((i) => +i));
-    bytes.push(0x01, 0x81, 0x00, 0x3b);
-    return new Uint8Array(bytes);
+
+    // Collect pixels: 0 = white (background), 1 = black (dark module)
+    const pixels: number[] = [];
+    this.rect_read(0, Infinity, (_, cur) => pixels.push(cur === true ? 1 : 0));
+
+    const lzw_data = lzw_encode_gif(pixels);
+
+    const u16_le = (i: number): number[] => [i & 0xff, (i >>> 8) & 0xff];
+    const dims = [...u16_le(width), ...u16_le(height)];
+
+    // GIF87a header + logical screen descriptor (2-color global palette)
+    const header: number[] = [
+      0x47, 0x49, 0x46, 0x38, 0x37, 0x61, // "GIF87a"
+      ...dims,
+      0x80, // GCT flag=1, color resolution=0, sort=0, GCT size=0 (→ 2 colors)
+      0x00, // background color index
+      0x00, // pixel aspect ratio (no info)
+      0xff, 0xff, 0xff, // color 0 = white
+      0x00, 0x00, 0x00 // color 1 = black
+    ];
+
+    // Image descriptor
+    const image_desc: number[] = [
+      0x2c, // image separator
+      0x00, 0x00, 0x00, 0x00, // left=0, top=0
+      ...dims,
+      0x00 // local color table flag=0, interlaced=0
+    ];
+
+    // LZW image data: min code size byte + sub-blocks (max 255 bytes each) + terminator
+    const image_data: number[] = [0x02]; // minimum LZW code size = 2
+    for (let i = 0;i < lzw_data.length;i += 255) {
+      const chunk = lzw_data.slice(i, i + 255);
+      image_data.push(chunk.length, ...chunk);
+    }
+    image_data.push(0x00); // block terminator
+
+    return new Uint8Array([...header, ...image_desc, ...image_data, 0x3b]); // 0x3b = GIF trailer
   }
 
+  /**
+   * Render the bitmap as raw RGB or RGBA image data.
+   * @throws if the pixel area exceeds MAX_QR_PIXELS
+   */
   to_image(is_rgb = false): Image {
     const { height, width } = this.size();
+    const total_pixels = width * height;
+    if (total_pixels > MAX_QR_PIXELS) {
+      throw new Error(
+        `QR output too large: ${width}×${height} = ${total_pixels} pixels. Maximum is ${MAX_QR_PIXELS}. Reduce scale or version.`
+      );
+    }
     const data = new Uint8Array(height * width * (is_rgb ? 3 : 4));
     let i = 0;
     for (let y = 0;y < height;y++) {

@@ -68,10 +68,12 @@ export interface CalendarEventOptions {
 
 // Validation helpers
 
+const SAFE_URL_SCHEMES = new Set(['http:', 'https:']);
+
 function validate_url(url: string): boolean {
   try {
-    new URL(url);
-    return true;
+    const parsed = new URL(url);
+    return SAFE_URL_SCHEMES.has(parsed.protocol);
   } catch {
     return false;
   }
@@ -86,6 +88,11 @@ function validate_phone(phone: string): boolean {
   // Allow digits, spaces, hyphens, parentheses, and plus sign
   const phone_regex = /^[\d\s\-\+\(\)]+$/;
   return phone_regex.test(phone);
+}
+
+/** Returns true if `str` contains ASCII control characters (null, tab, newline, etc.) */
+function has_control_chars(str: string): boolean {
+  return /[\x00-\x1f\x7f]/.test(str);
 }
 
 function escape_vcard(text: string): string {
@@ -221,15 +228,32 @@ export function encode_sms(phone: string, opts: SmsOptions = {}): string {
  * });
  * ```
  */
+/**
+ * Create a vCard 4.0 (RFC 6350) contact QR code string
+ *
+ * @example
+ * ```typescript
+ * const vcard = encode_vcard({
+ *   first_name: 'John',
+ *   last_name: 'Doe',
+ *   organization: 'Acme Inc',
+ *   phone: '+1-555-123-4567',
+ *   email: 'john@example.com',
+ *   url: 'https://example.com'
+ * });
+ * ```
+ */
 export function encode_vcard(opts: VCardOptions): string {
-  const lines: string[] = ['BEGIN:VCARD', 'VERSION:3.0'];
+  // vCard 4.0 per RFC 6350 — line endings are CRLF
+  const CRLF = '\r\n';
+  const lines: string[] = ['BEGIN:VCARD', 'VERSION:4.0'];
 
-  // Name
+  // Name (N: Family;Given;Additional;Prefix;Suffix)
   if (opts.first_name || opts.last_name) {
     const last = escape_vcard(opts.last_name || '');
     const first = escape_vcard(opts.first_name || '');
     lines.push(`N:${last};${first};;;`);
-    lines.push(`FN:${first} ${last}`.trim());
+    lines.push(`FN:${[first, last].filter(Boolean).join(' ')}`);
   }
 
   // Organization and title
@@ -240,34 +264,34 @@ export function encode_vcard(opts: VCardOptions): string {
     lines.push(`TITLE:${escape_vcard(opts.title)}`);
   }
 
-  // Contact info
+  // Contact info — RFC 6350 uses TYPE parameter
   if (opts.phone) {
     const cleaned = opts.phone.replace(/[^\d+]/g, '');
-    lines.push(`TEL:${cleaned}`);
+    lines.push(`TEL;TYPE=voice:${cleaned}`);
   }
   if (opts.email) {
     if (!validate_email(opts.email)) {
       throw new Error(`Invalid email in vCard: ${opts.email}`);
     }
-    lines.push(`EMAIL:${opts.email}`);
+    lines.push(`EMAIL;TYPE=work:${opts.email}`);
   }
   if (opts.url) {
-    lines.push(`URL:${opts.url}`);
+    lines.push(`URL;TYPE=work:${opts.url}`);
   }
 
-  // Address
+  // Address — RFC 6350: PO Box;Extended;Street;City;State;Postal;Country
   if (opts.address) {
     const addr = opts.address;
     const parts = [
-      '', // PO Box (not used)
-      '', // Extended address (not used)
+      '',
+      '',
       escape_vcard(addr.street || ''),
       escape_vcard(addr.city || ''),
       escape_vcard(addr.state || ''),
       escape_vcard(addr.zip || ''),
       escape_vcard(addr.country || '')
     ];
-    lines.push(`ADR:${parts.join(';')}`);
+    lines.push(`ADR;TYPE=work:${parts.join(';')}`);
   }
 
   // Note
@@ -277,7 +301,7 @@ export function encode_vcard(opts: VCardOptions): string {
 
   lines.push('END:VCARD');
 
-  return lines.join('\n');
+  return lines.join(CRLF);
 }
 
 /**
@@ -300,6 +324,12 @@ export function encode_wifi(opts: WifiOptions): string {
 
   if (!ssid) {
     throw new Error('WiFi SSID is required');
+  }
+  if (has_control_chars(ssid)) {
+    throw new Error('WiFi SSID contains invalid control characters (null bytes, tabs, newlines, etc.)');
+  }
+  if (password && has_control_chars(password)) {
+    throw new Error('WiFi password contains invalid control characters (null bytes, tabs, newlines, etc.)');
   }
 
   // Escape special characters in SSID and password

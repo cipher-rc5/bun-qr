@@ -7,479 +7,33 @@ import { detect_type as detect_type_core, encode_payload } from './core/encoder'
 import { create_interleaver } from './core/error-correction';
 import { draw_qr as draw_qr_core, draw_qr_best as draw_qr_best_core, draw_template as draw_template_core, PATTERNS, zigzag as zigzag_core } from './core/layout';
 import { calculate_penalty } from './core/penalty';
+import { BYTES, ECC_BLOCKS, WORDS_PER_BLOCK } from './core/tables';
+import { alphabet, best, bin, fill_arr } from './core/utils';
 export type { Image, Point, Size } from './core/bitmap';
 
-// Type definitions
-export interface Coder<F, T> {
+// Internal Coder type — not part of the public API
+interface Coder<F, T> {
   encode(from: F): T;
   decode(to: T): F;
-}
-
-// Validation helpers
-function assert_number(n: number) {
-  if (!Number.isSafeInteger(n)) throw new Error(`integer expected: ${n}`);
-}
-
-function validate_version(ver: Version): void {
-  if (!Number.isSafeInteger(ver) || ver < 1 || ver > 40) {
-    throw new Error(`Invalid version=${ver}. Expected number [1..40]`);
-  }
-}
-
-// Convert decimal to binary string with padding
-function bin(dec: number, pad: number): string {
-  return dec.toString(2).padStart(pad, '0');
-}
-
-// Create array filled with value
-function fill_arr<T>(length: number, val: T): T[] {
-  return new Array(length).fill(val);
-}
-
-// Find best value by minimizing score
-function best<T>(): { add(score: number, value: T): void, get: () => T | undefined, score: () => number } {
-  let best: T | undefined;
-  let best_score = Infinity;
-  return {
-    add(score: number, value: T): void {
-      if (score >= best_score) return;
-      best = value;
-      best_score = score;
-    },
-    get: (): T | undefined => best,
-    score: (): number => best_score
-  };
-}
-
-// Create encoder/decoder for character alphabet
-function alphabet(alphabet: string): Coder<number[], string[]> & { has: (char: string) => boolean } {
-  return {
-    has: (char: string) => alphabet.includes(char),
-    decode: (input: string[]) => {
-      if (!Array.isArray(input) || (input.length && typeof input[0] !== 'string')) {
-        throw new Error('alphabet.decode input should be array of strings');
-      }
-      return input.map((letter) => {
-        if (typeof letter !== 'string') {
-          throw new Error(`alphabet.decode: not string element=${letter}`);
-        }
-        const index = alphabet.indexOf(letter);
-        if (index === -1) throw new Error(`Unknown letter: "${letter}". Allowed: ${alphabet}`);
-        return index;
-      });
-    },
-    encode: (digits: number[]) => {
-      if (!Array.isArray(digits) || (digits.length && typeof digits[0] !== 'number')) {
-        throw new Error('alphabet.encode input should be an array of numbers');
-      }
-      return digits.map((i) => {
-        assert_number(i);
-        if (i < 0 || i >= alphabet.length) {
-          throw new Error(`Digit index outside alphabet: ${i} (alphabet: ${alphabet.length})`);
-        }
-        return alphabet[i];
-      });
-    }
-  };
 }
 
 // QR code types and constants
 export const EC_MODE = ['low', 'medium', 'quartile', 'high'] as const;
 export type ErrorCorrection = (typeof EC_MODE)[number];
-export type Version = number;
+
+/**
+ * Nominal type for a valid QR version (1–40).
+ * Obtained by calling `validate_version(n)` — do not cast directly.
+ */
+export type Version = number & { readonly __brand: 'QrVersion' };
+
 export type Mask = (0 | 1 | 2 | 3 | 4 | 5 | 6 | 7) & keyof typeof PATTERNS;
 export const ENCODING = ['numeric', 'alphanumeric', 'byte', 'kanji', 'eci'] as const;
 export type EncodingType = (typeof ENCODING)[number];
 
-// QR code capacity lookup tables
-const BYTES = [
-  26,
-  44,
-  70,
-  100,
-  134,
-  172,
-  196,
-  242,
-  292,
-  346,
-  404,
-  466,
-  532,
-  581,
-  655,
-  733,
-  815,
-  901,
-  991,
-  1085,
-  1156,
-  1258,
-  1364,
-  1474,
-  1588,
-  1706,
-  1828,
-  1921,
-  2051,
-  2185,
-  2323,
-  2465,
-  2611,
-  2761,
-  2876,
-  3034,
-  3196,
-  3362,
-  3532,
-  3706
-];
-
-const WORDS_PER_BLOCK = {
-  low: [
-    7,
-    10,
-    15,
-    20,
-    26,
-    18,
-    20,
-    24,
-    30,
-    18,
-    20,
-    24,
-    26,
-    30,
-    22,
-    24,
-    28,
-    30,
-    28,
-    28,
-    28,
-    28,
-    30,
-    30,
-    26,
-    28,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30
-  ],
-  medium: [
-    10,
-    16,
-    26,
-    18,
-    24,
-    16,
-    18,
-    22,
-    22,
-    26,
-    30,
-    22,
-    22,
-    24,
-    24,
-    28,
-    28,
-    26,
-    26,
-    26,
-    26,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28,
-    28
-  ],
-  quartile: [
-    13,
-    22,
-    18,
-    26,
-    18,
-    24,
-    18,
-    22,
-    20,
-    24,
-    28,
-    26,
-    24,
-    20,
-    30,
-    24,
-    28,
-    28,
-    26,
-    30,
-    28,
-    30,
-    30,
-    30,
-    30,
-    28,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30
-  ],
-  high: [
-    17,
-    28,
-    22,
-    16,
-    22,
-    28,
-    26,
-    26,
-    24,
-    28,
-    24,
-    28,
-    22,
-    24,
-    24,
-    30,
-    28,
-    28,
-    26,
-    28,
-    30,
-    24,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30
-  ]
-};
-
-const ECC_BLOCKS = {
-  low: [
-    1,
-    1,
-    1,
-    1,
-    1,
-    2,
-    2,
-    2,
-    2,
-    4,
-    4,
-    4,
-    4,
-    4,
-    6,
-    6,
-    6,
-    6,
-    7,
-    8,
-    8,
-    9,
-    9,
-    10,
-    12,
-    12,
-    12,
-    13,
-    14,
-    15,
-    16,
-    17,
-    18,
-    19,
-    19,
-    20,
-    21,
-    22,
-    24,
-    25
-  ],
-  medium: [
-    1,
-    1,
-    1,
-    2,
-    2,
-    4,
-    4,
-    4,
-    5,
-    5,
-    5,
-    8,
-    9,
-    9,
-    10,
-    10,
-    11,
-    13,
-    14,
-    16,
-    17,
-    17,
-    18,
-    20,
-    21,
-    23,
-    25,
-    26,
-    28,
-    29,
-    31,
-    33,
-    35,
-    37,
-    38,
-    40,
-    43,
-    45,
-    47,
-    49
-  ],
-  quartile: [
-    1,
-    1,
-    2,
-    2,
-    4,
-    4,
-    6,
-    6,
-    8,
-    8,
-    8,
-    10,
-    12,
-    16,
-    12,
-    17,
-    16,
-    18,
-    21,
-    20,
-    23,
-    23,
-    25,
-    27,
-    29,
-    34,
-    34,
-    35,
-    38,
-    40,
-    43,
-    45,
-    48,
-    51,
-    53,
-    56,
-    59,
-    62,
-    65,
-    68
-  ],
-  high: [
-    1,
-    1,
-    2,
-    4,
-    4,
-    4,
-    5,
-    6,
-    8,
-    8,
-    11,
-    11,
-    16,
-    16,
-    18,
-    16,
-    19,
-    21,
-    25,
-    25,
-    25,
-    34,
-    30,
-    32,
-    35,
-    37,
-    40,
-    42,
-    45,
-    48,
-    51,
-    54,
-    57,
-    60,
-    63,
-    66,
-    70,
-    74,
-    77,
-    81
-  ]
-};
-
 // QR code information and utilities
 const info = {
-  size: { encode: (ver: Version) => 21 + 4 * (ver - 1), decode: (size: number) => (size - 17) / 4 } as Coder<Version, number>,
+  size: { encode: (ver: Version) => 21 + 4 * (ver - 1), decode: (size: number) => (size - 17) / 4 },
   size_type: (ver: Version) => Math.floor((ver + 7) / 17),
   alignment_patterns(ver: Version) {
     if (ver === 1) return [];
@@ -504,7 +58,7 @@ const info = {
     return ((data << 10) | d) ^ info.format_mask;
   },
   version_bits(ver: Version) {
-    let d = ver;
+    let d: number = ver;
     for (let i = 0;i < 12;i++) d = (d << 1) ^ ((d >> 11) * 0b1111100100101);
     return (ver << 12) | d;
   },
@@ -553,7 +107,7 @@ function detect_type(str: string): EncodingType {
   return detect_type_core(info, str);
 }
 
-// Convert UTF-8 string to bytes (Bun native)
+// Convert UTF-8 string to bytes
 export function utf8_to_bytes(str: string): Uint8Array {
   if (typeof str !== 'string') throw new Error(`utf8_to_bytes expected string, got ${typeof str}`);
   return new TextEncoder().encode(str);
@@ -585,8 +139,15 @@ function draw_qr_best(ver: Version, ecc: ErrorCorrection, data: Uint8Array, mask
 export type QrOpts = {
   ecc?: ErrorCorrection | undefined,
   encoding?: EncodingType | undefined,
-  text_encoder?: (text: string) => Uint8Array,
-  version?: Version | undefined,
+  /**
+   * Custom UTF-8 encoder. This function receives potentially untrusted user input (the `text`
+   * argument passed to `encode_qr`). Ensure your encoder does not execute or eval the input.
+   * @param text - raw user-supplied string
+   * @returns UTF-8 byte representation
+   */
+  text_encoder?: ((text: string) => Uint8Array) | undefined,
+  /** Plain number in range 1–40; validated internally before use */
+  version?: number | undefined,
   mask?: number | undefined,
   border?: number | undefined,
   scale?: number | undefined
@@ -595,13 +156,13 @@ export type QrOpts = {
 export type SvgQrOpts = { optimize?: boolean | undefined };
 
 // Validation helpers
-function validate_ecc(ec: ErrorCorrection) {
+function validate_ecc(ec: ErrorCorrection): void {
   if (!EC_MODE.includes(ec)) {
     throw new Error(`Invalid error correction mode=${ec}. Expected: ${EC_MODE}`);
   }
 }
 
-function validate_encoding(enc: EncodingType) {
+function validate_encoding(enc: EncodingType): void {
   if (!ENCODING.includes(enc)) {
     throw new Error(`Encoding: invalid mode=${enc}. Expected: ${ENCODING}`);
   }
@@ -610,10 +171,21 @@ function validate_encoding(enc: EncodingType) {
   }
 }
 
-function validate_mask(mask: Mask) {
+function validate_mask(mask: Mask): void {
   if (![0, 1, 2, 3, 4, 5, 6, 7].includes(mask) || !PATTERNS[mask]) {
     throw new Error(`Invalid mask=${mask}. Expected number [0..7]`);
   }
+}
+
+/**
+ * Validate that `ver` is a safe integer in [1, 40] and return it as a branded `Version`.
+ * @throws if `ver` is out of range
+ */
+export function validate_version(ver: number): Version {
+  if (!Number.isSafeInteger(ver) || ver < 1 || ver > 40) {
+    throw new Error(`Invalid version=${ver}. Expected number [1..40]`);
+  }
+  return ver as Version;
 }
 
 export type Output = 'raw' | 'ascii' | 'term' | 'gif' | 'svg';
@@ -629,16 +201,20 @@ export function encode_qr(text: string, output: Output = 'raw', opts: QrOpts & S
   const encoding = opts.encoding !== undefined ? opts.encoding : detect_type(text);
   validate_encoding(encoding);
   if (opts.mask !== undefined) validate_mask(opts.mask as Mask);
-  let ver = opts.version;
-  let data, err = new Error('Unknown error');
-  if (ver !== undefined) {
-    validate_version(ver);
+
+  let ver: Version | undefined;
+  let data: Uint8Array | undefined;
+  let err = new Error('Unknown error');
+
+  if (opts.version !== undefined) {
+    ver = validate_version(opts.version);
     data = encode(ver, ecc, text, encoding, opts.text_encoder);
   } else {
     for (let i = 1;i <= 40;i++) {
       try {
-        data = encode(i, ecc, text, encoding, opts.text_encoder);
-        ver = i;
+        const v = i as Version;
+        data = encode(v, ecc, text, encoding, opts.text_encoder);
+        ver = v;
         break;
       } catch (e) {
         err = e as Error;

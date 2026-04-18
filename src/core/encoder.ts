@@ -72,3 +72,7 @@ export function encode_payload<TEncoding extends string, TVersion extends number
   const bytes = Uint8Array.from(bits.match(/(.{8})/g)!.map((i) => Number(`0b${i}`)));
   return interleave(ver, ecc).encode(bytes);
 }
+
+// Internal exports for unit testing — do not use in application code
+export const _tests = { detect_type, encode_payload };
+
