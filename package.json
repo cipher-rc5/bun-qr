@@ -43,6 +43,6 @@
     "prepublishOnly": "bun run typecheck && bun test && bun run build"
   },
   "peerDependencies": {
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.3"
   }
 }
