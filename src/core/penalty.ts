@@ -177,4 +177,3 @@ export const _tests = {
   calculate_row_finder_penalty,
   calculate_column_finder_penalty
 };
-

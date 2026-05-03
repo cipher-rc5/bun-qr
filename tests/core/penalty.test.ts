@@ -49,9 +49,17 @@ describe('R1: run-length penalty', () => {
 
   test('two separate runs of 5 → penalty 6', () => {
     const row = [
-      true, true, true, true, true, // run of 5
+      true,
+      true,
+      true,
+      true,
+      true, // run of 5
       false,
-      true, true, true, true, true // run of 5
+      true,
+      true,
+      true,
+      true,
+      true // run of 5
     ];
     expect(calculate_row_run_penalty(row)).toBe(6);
   });
@@ -81,24 +89,14 @@ describe('R2: 2×2 block penalty', () => {
   test('4×4 checkerboard → R2 = 0 (no same-color 2×2 blocks)', () => {
     // Perfect checkerboard: no 2×2 submatrix is monochromatic
     // R1=0, R2=0, R3=0, R4=0 → total = 0
-    const bm = make_bitmap([
-      'X X ',
-      ' X X',
-      'X X ',
-      ' X X'
-    ]);
+    const bm = make_bitmap(['X X ', ' X X', 'X X ', ' X X']);
     expect(calculate_penalty(bm)).toBe(0);
   });
 
   test('4×4 all-light → R2 = 27 (9 overlapping light 2×2 blocks)', () => {
     // All light: (4-1)×(4-1) = 9 overlapping 2×2 blocks × 3 pts = 27
     // R1=0 (runs of 4 < threshold 5), R2=27, R3=0, R4=100 → total = 127
-    const bm = make_bitmap([
-      '    ',
-      '    ',
-      '    ',
-      '    '
-    ]);
+    const bm = make_bitmap(['    ', '    ', '    ', '    ']);
     // Verify just the R2 contribution: a bitmap with the same run/balance
     // but broken 2×2 blocks (checkerboard) has total=0, so difference ≥ 27
     const chk = make_bitmap(['X X ', ' X X', 'X X ', ' X X']);
@@ -142,18 +140,8 @@ describe('R4: dark module balance', () => {
   test('50% dark in 4×4 bitmap → R4 contributes 0', () => {
     // 8 dark out of 16 = 50% → deviation 0 → R4 penalty 0
     // Using a checkerboard for 50% balance and no 2×2 blocks
-    const balanced = make_bitmap([
-      'X X ',
-      ' X X',
-      'X X ',
-      ' X X'
-    ]);
-    const all_dark = make_bitmap([
-      'XXXX',
-      'XXXX',
-      'XXXX',
-      'XXXX'
-    ]);
+    const balanced = make_bitmap(['X X ', ' X X', 'X X ', ' X X']);
+    const all_dark = make_bitmap(['XXXX', 'XXXX', 'XXXX', 'XXXX']);
     const diff = calculate_penalty(all_dark) - calculate_penalty(balanced);
     // all_dark: R4 = 100 (100% dark → deviation 50), balanced: R4 = 0
     expect(diff).toBeGreaterThanOrEqual(100);
@@ -162,12 +150,7 @@ describe('R4: dark module balance', () => {
   test('0% dark (4×4 all light) → penalty 100 from R4', () => {
     // 0% dark: deviation = 50, steps = 10, penalty = 100
     // No R1 (runs < 5), no R2 (no blocks), no R3 (no finder pattern)
-    const bm = make_bitmap([
-      '    ',
-      '    ',
-      '    ',
-      '    '
-    ]);
+    const bm = make_bitmap(['    ', '    ', '    ', '    ']);
     expect(calculate_penalty(bm)).toBe(127); // R2=27 (9 light 2×2 blocks) + R4=100
   });
 });

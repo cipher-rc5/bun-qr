@@ -75,4 +75,3 @@ export function encode_payload<TEncoding extends string, TVersion extends number
 
 // Internal exports for unit testing — do not use in application code
 export const _tests = { detect_type, encode_payload };
-

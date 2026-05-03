@@ -1,8 +1,8 @@
 # bun-qr
 
-Codebase forked from the work of [paulmillr](https://github.com/paulmillr). Original codebase is available [https://github.com/paulmillr/qr](https://github.com/paulmillr/qr).  
+Codebase forked from the work of [paulmillr](https://github.com/paulmillr). Original codebase is available [https://github.com/paulmillr/qr](https://github.com/paulmillr/qr).
 
-QR code generator built using the bun runtime. Zero dependencies, strict TypeScript, with multiple output formats, CLI support, and built-in link encoding utilities. Instance is a fork of the work 
+QR code generator built using the bun runtime. Zero dependencies, strict TypeScript, with multiple output formats, CLI support, and built-in link encoding utilities. Instance is a fork of the work
 
 ## Features
 

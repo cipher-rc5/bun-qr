@@ -2,17 +2,20 @@
 // description: Browser and DOM utilities for QR scanning
 // reference: https://github.com/cipher-rc5/bun-qr
 
-
 // Get element dimensions from computed style
 export const get_size = (elm: HTMLElement): { width: number, height: number } => {
   const css = getComputedStyle(elm);
   const width = parseFloat(css.width);
   const height = parseFloat(css.height);
   if (!isFinite(width) || width <= 0) {
-    throw new Error(`get_size: could not read element width (got "${css.width}"). Ensure the element is attached to the DOM and has a resolved layout.`);
+    throw new Error(
+      `get_size: could not read element width (got "${css.width}"). Ensure the element is attached to the DOM and has a resolved layout.`
+    );
   }
   if (!isFinite(height) || height <= 0) {
-    throw new Error(`get_size: could not read element height (got "${css.height}"). Ensure the element is attached to the DOM and has a resolved layout.`);
+    throw new Error(
+      `get_size: could not read element height (got "${css.height}"). Ensure the element is attached to the DOM and has a resolved layout.`
+    );
   }
   return { width: Math.floor(width), height: Math.floor(height) };
 };

@@ -138,14 +138,18 @@ function draw_qr_best(ver: Version, ecc: ErrorCorrection, data: Uint8Array, mask
 
 export type QrOpts = {
   ecc?: ErrorCorrection | undefined,
-  encoding?: EncodingType | undefined,
+  encoding?:
+    | EncodingType
+    | undefined,
   /**
    * Custom UTF-8 encoder. This function receives potentially untrusted user input (the `text`
    * argument passed to `encode_qr`). Ensure your encoder does not execute or eval the input.
    * @param text - raw user-supplied string
    * @returns UTF-8 byte representation
    */
-  text_encoder?: ((text: string) => Uint8Array) | undefined,
+  text_encoder?:
+    | ((text: string) => Uint8Array)
+    | undefined,
   /** Plain number in range 1–40; validated internally before use */
   version?: number | undefined,
   mask?: number | undefined,

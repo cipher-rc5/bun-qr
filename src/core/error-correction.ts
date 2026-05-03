@@ -270,4 +270,3 @@ export function create_interleaver(capacity: CapacityInfo): Coder<Uint8Array, Ui
 
 // Internal exports for unit testing — do not use in application code
 export const _tests = { GF, RS };
-

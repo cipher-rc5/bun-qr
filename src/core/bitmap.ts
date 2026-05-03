@@ -330,19 +330,31 @@ export class Bitmap {
 
     // GIF87a header + logical screen descriptor (2-color global palette)
     const header: number[] = [
-      0x47, 0x49, 0x46, 0x38, 0x37, 0x61, // "GIF87a"
+      0x47,
+      0x49,
+      0x46,
+      0x38,
+      0x37,
+      0x61, // "GIF87a"
       ...dims,
       0x80, // GCT flag=1, color resolution=0, sort=0, GCT size=0 (→ 2 colors)
       0x00, // background color index
       0x00, // pixel aspect ratio (no info)
-      0xff, 0xff, 0xff, // color 0 = white
-      0x00, 0x00, 0x00 // color 1 = black
+      0xff,
+      0xff,
+      0xff, // color 0 = white
+      0x00,
+      0x00,
+      0x00 // color 1 = black
     ];
 
     // Image descriptor
     const image_desc: number[] = [
       0x2c, // image separator
-      0x00, 0x00, 0x00, 0x00, // left=0, top=0
+      0x00,
+      0x00,
+      0x00,
+      0x00, // left=0, top=0
       ...dims,
       0x00 // local color table flag=0, interlaced=0
     ];
