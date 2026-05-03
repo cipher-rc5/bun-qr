@@ -28,7 +28,7 @@ export class QrCliApplication {
 
     try {
       const normalized = this.normalizer.normalize(args.url);
-      const output = this.generator.generate(normalized, args.format);
+      const output = this.generator.generate(normalized, args.format, args.size);
       await this.handleOutput(args, output);
       this.presenter.printSuccess('QR generation completed.');
       return 0;

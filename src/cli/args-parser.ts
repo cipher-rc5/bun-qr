@@ -5,6 +5,7 @@ const FORMATS: readonly CliOutputFormat[] = ['svg', 'gif', 'ascii', 'term'];
 export function parseCliArgs(argv: readonly string[]): CliArgs {
   let outputPath: string | undefined;
   let format: CliOutputFormat = 'svg';
+  let size: number | undefined;
   const positional: string[] = [];
 
   for (let i = 0;i < argv.length;i++) {
@@ -37,6 +38,20 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
       continue;
     }
 
+    if (arg === '--size' || arg === '-s') {
+      const next = argv[i + 1];
+      if (!next) {
+        throw new Error('Missing value for --size.');
+      }
+      const n = Number(next);
+      if (!Number.isInteger(n) || n < 1) {
+        throw new Error(`Invalid size: ${next}. Must be a positive integer.`);
+      }
+      size = n;
+      i++;
+      continue;
+    }
+
     positional.push(arg);
   }
 
@@ -45,7 +60,7 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
     throw new Error(helpText());
   }
 
-  return outputPath === undefined ? { url, format } : { url, format, outputPath };
+  return { url, format, ...(outputPath !== undefined && { outputPath }), ...(size !== undefined && { size }) };
 }
 
 function isFormat(value: string): value is CliOutputFormat {
@@ -59,11 +74,13 @@ export function helpText(): string {
     'Options:',
     '  -f, --format <svg|gif|ascii|term>   Output format (default: svg)',
     '  -o, --output <path>                  Output file for svg/gif formats',
+    '  -s, --size <pixels>                  Output size in pixels (svg only)',
     '  -h, --help                           Show help',
     '',
     'Examples:',
     '  bun-qr https://bun.com',
     '  bun-qr bun.com --format gif --output bun.gif',
-    '  bun-qr https://bun.sh --format term'
+    '  bun-qr https://bun.sh --format term',
+    '  bun-qr https://bun.sh --size 128 --output bun-128.svg'
   ].join('\n');
 }

@@ -4,6 +4,7 @@ export interface CliArgs {
   readonly url: string;
   readonly format: CliOutputFormat;
   readonly outputPath?: string;
+  readonly size?: number;
 }
 
 export interface UrlNormalizer {
@@ -11,7 +12,7 @@ export interface UrlNormalizer {
 }
 
 export interface QrGenerator {
-  generate(payload: string, format: CliOutputFormat): string | Uint8Array;
+  generate(payload: string, format: CliOutputFormat, size?: number): string | Uint8Array;
 }
 
 export interface OutputPresenter {
