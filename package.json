@@ -4,7 +4,9 @@
   "description": "QR code generator with link encoding utilities for Bun runtime",
   "module": "dist/index.js",
   "main": "dist/index.js",
-  "bin": { "bun-qr": "./src/cli.ts" },
+  "bin": {
+    "bun-qr": "./src/cli.ts"
+  },
   "type": "module",
   "scripts": {
     "build": "bun run tsconfig.build.ts 2>/dev/null || bunx tsc --project tsconfig.build.json",
@@ -17,11 +19,25 @@
     "prepublishOnly": "bun run typecheck && bun test && bun run build"
   },
   "exports": {
-    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts", "bun": "./src/index.ts" },
-    "./links": { "import": "./dist/links.js", "types": "./dist/links.d.ts", "bun": "./src/links.ts" }
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts"
+    },
+    "./links": {
+      "import": "./dist/links.js",
+      "types": "./dist/links.d.ts",
+      "bun": "./src/links.ts"
+    }
   },
   "files": ["dist", "src", "README.md", "LICENSE"],
-  "engines": { "bun": "1.1.13" },
-  "devDependencies": { "@types/bun": "1.3.13" },
-  "peerDependencies": { "typescript": "6.0.3" }
+  "engines": {
+    "bun": "1.1.13"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.13"
+  },
+  "peerDependencies": {
+    "typescript": "6.0.3"
+  }
 }
