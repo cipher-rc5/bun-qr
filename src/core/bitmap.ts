@@ -72,14 +72,21 @@ function lzw_encode_gif(pixels: readonly number[]): number[] {
     return out;
   }
 
-  let prefix = pixels[0]!;
+  // `pixels` is non-empty here (the empty case returned above), and the loop below stays
+  // within length, so every element read resolves. `?? 0` keeps the reads total without a
+  // non-null assertion; pixel values are 0/1 so 0 is also the correct neutral fallback.
+  let prefix = pixels[0] ?? 0;
 
   for (let i = 1;i < pixels.length;i++) {
-    const sym = pixels[i]!; // 0 or 1
+    const sym = pixels[i] ?? 0; // 0 or 1
     const key = (prefix << 1) | sym;
+    // key = (prefix << 1) | sym with prefix < MAX_CODE and sym ∈ {0,1}, so
+    // key <= (4095 << 1) | 1 = 8191 — always inside the 8192-entry table. The explicit
+    // `undefined` guard keeps the `!== -1` test below correct regardless: an out-of-range
+    // read would be `undefined`, which is `!== -1` and would take the wrong branch.
     const found = dict[key];
 
-    if (found !== -1) {
+    if (found !== undefined && found !== -1) {
       prefix = found;
     } else {
       write_code(prefix);
@@ -122,7 +129,7 @@ export class Bitmap {
     s = s.replace(/^\n+/g, '').replace(/\n+$/g, '');
     const lines = s.split(String.fromCharCode(ch_codes.newline));
     const height = lines.length;
-    const data = new Array(height);
+    const data: DrawValue[][] = [];
     let width: number | undefined;
     for (const line of lines) {
       const row = line.split('').map((i) => {
@@ -152,8 +159,19 @@ export class Bitmap {
     this.width = width;
   }
 
+  /**
+   * Read a single module.
+   *
+   * Unlike the drawing methods this does not accept negative (far-edge) coordinates —
+   * it is a plain bounds-checked read. Out-of-range coordinates throw rather than
+   * returning `undefined`, which would be indistinguishable from an undrawn module.
+   */
   point(p: Point): DrawValue {
-    return this.data[p.y][p.x];
+    const row = this.data[p.y];
+    if (row === undefined || p.x < 0 || p.x >= this.width) {
+      throw new Error(`Bitmap.point: (${p.x}, ${p.y}) out of range for ${this.width}×${this.height}`);
+    }
+    return row[p.x];
   }
 
   is_inside(p: Point): boolean {
@@ -166,10 +184,26 @@ export class Bitmap {
     return { height: this.height - y, width: this.width - x };
   }
 
+  /**
+   * Normalize a coordinate to an in-bounds `{x, y}` pair.
+   *
+   * Negative coordinates address from the far edge (Python-style): `x = -1` is the last
+   * column, `x = -width` is the first. This is relied upon by the layout code, which embeds
+   * the top-right/bottom-left finder patterns via `{ x: -finder.width, y: 0 }`.
+   *
+   * Coordinates outside `[-dimension, dimension - 1]` are rejected rather than silently
+   * wrapped, so an out-of-range index surfaces as an error instead of corrupting the bitmap.
+   */
   private xy(c: Point | number) {
     if (typeof c === 'number') c = { x: c, y: c };
     if (!Number.isSafeInteger(c.x)) throw new Error(`Bitmap: invalid x=${c.x}`);
     if (!Number.isSafeInteger(c.y)) throw new Error(`Bitmap: invalid y=${c.y}`);
+    if (c.x < -this.width || c.x >= this.width) {
+      throw new Error(`Bitmap: x=${c.x} out of range for width=${this.width}`);
+    }
+    if (c.y < -this.height || c.y >= this.height) {
+      throw new Error(`Bitmap: y=${c.y} out of range for height=${this.height}`);
+    }
     c.x = mod(c.x, this.width);
     c.y = mod(c.y, this.height);
     return c;
@@ -178,11 +212,23 @@ export class Bitmap {
   rect(c: Point | number, size: Size | number, value: DrawFn): this {
     const { x, y } = this.xy(c);
     const { height, width } = Bitmap.size(size, this.size({ x, y }));
-    for (let y_pos = 0;y_pos < height;y_pos++) {
-      for (let x_pos = 0;x_pos < width;x_pos++) {
-        this.data[y + y_pos][x + x_pos] = typeof value === 'function' ?
-          value({ x: x_pos, y: y_pos }, this.data[y + y_pos][x + x_pos]) :
-          value;
+    // `xy` and `Bitmap.size` clamp the region to the bitmap, so every row in
+    // [y, y+height) exists. The row is hoisted out of the inner loop: this removes the
+    // per-module row lookup and lets the function/constant branch be taken once per rect
+    // rather than once per module.
+    if (typeof value === 'function') {
+      for (let y_pos = 0;y_pos < height;y_pos++) {
+        const row = this.data[y + y_pos];
+        if (row === undefined) break;
+        for (let x_pos = 0;x_pos < width;x_pos++) {
+          row[x + x_pos] = value({ x: x_pos, y: y_pos }, row[x + x_pos]);
+        }
+      }
+    } else {
+      for (let y_pos = 0;y_pos < height;y_pos++) {
+        const row = this.data[y + y_pos];
+        if (row === undefined) break;
+        for (let x_pos = 0;x_pos < width;x_pos++) row[x + x_pos] = value;
       }
     }
     return this;
@@ -212,33 +258,41 @@ export class Bitmap {
   }
 
   embed(c: Point | number, bm: Bitmap): this {
-    return this.rect(c, bm.size(), ({ x, y }) => bm.data[y][x]);
+    // `rect` iterates exactly over `bm.size()`, so (x, y) always indexes within `bm`.
+    return this.rect(c, bm.size(), ({ x, y }) => bm.data[y]?.[x]);
   }
 
   rect_slice(c: Point | number, size: Size | number = this.size()): Bitmap {
     const rect = new Bitmap(Bitmap.size(size, this.size(this.xy(c))));
-    this.rect(c, size, ({ x, y }, cur) => (rect.data[y][x] = cur));
+    // `rect` is allocated at exactly the traversed size, so row `y` always exists.
+    this.rect(c, size, ({ x, y }, cur) => {
+      const row = rect.data[y];
+      if (row !== undefined) row[x] = cur;
+      return cur;
+    });
     return rect;
   }
 
   inverse(): Bitmap {
     const { height, width } = this;
     const res = new Bitmap({ height: width, width: height });
-    return res.rect({ x: 0, y: 0 }, Infinity, ({ x, y }) => this.data[x][y]);
+    // Transposed: the result is width×height, so (x, y) indexes this.data[x][y].
+    return res.rect({ x: 0, y: 0 }, Infinity, ({ x, y }) => this.data[x]?.[y]);
   }
 
   scale(factor: number): Bitmap {
-    if (!Number.isSafeInteger(factor) || factor > 1024) {
-      throw new Error(`invalid scale factor: ${factor}`);
+    if (!Number.isSafeInteger(factor) || factor < 1 || factor > 1024) {
+      throw new Error(`invalid scale factor: ${factor}. Expected number [1..1024]`);
     }
     const { height, width } = this;
     const res = new Bitmap({ height: factor * height, width: factor * width });
-    return res.rect({ x: 0, y: 0 }, Infinity, ({ x, y }) => this.data[Math.floor(y / factor)][Math.floor(x / factor)]);
+    // y ranges over [0, factor*height), so y/factor floors into [0, height).
+    return res.rect({ x: 0, y: 0 }, Infinity, ({ x, y }) => this.data[Math.floor(y / factor)]?.[Math.floor(x / factor)]);
   }
 
   clone(): Bitmap {
     const res = new Bitmap(this.size());
-    return res.rect({ x: 0, y: 0 }, this.size(), ({ x, y }) => this.data[y][x]);
+    return res.rect({ x: 0, y: 0 }, this.size(), ({ x, y }) => this.data[y]?.[x]);
   }
 
   assert_drawn(): void {
@@ -255,9 +309,13 @@ export class Bitmap {
     const { height, width, data } = this;
     let out = '';
     for (let y = 0;y < height;y += 2) {
+      // Rows hoisted out of the x loop; y < height so `row` is always present.
+      const row = data[y];
+      const next = data[y + 1];
+      if (row === undefined) break;
       for (let x = 0;x < width;x++) {
-        const first = data[y][x];
-        const second = y + 1 >= height ? true : data[y + 1][x];
+        const first = row[x];
+        const second = y + 1 >= height || next === undefined ? true : next[x];
         if (!first && !second) out += '█';
         else if (!first && second) out += '▀';
         else if (first && !second) out += '▄';
@@ -385,8 +443,11 @@ export class Bitmap {
     const data = new Uint8Array(height * width * (is_rgb ? 3 : 4));
     let i = 0;
     for (let y = 0;y < height;y++) {
+      // Row hoisted out of the x loop; y < height so `row` is always present.
+      const row = this.data[y];
+      if (row === undefined) break;
       for (let x = 0;x < width;x++) {
-        const value = !!this.data[y][x] ? 0 : 255;
+        const value = !!row[x] ? 0 : 255;
         data[i++] = value;
         data[i++] = value;
         data[i++] = value;

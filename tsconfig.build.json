@@ -1,27 +1,17 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "target": "ESNext",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "jsx": "react-jsx",
-    "allowJs": false,
+    // Declaration-only emit. Bun executes TypeScript natively, so `src/` ships
+    // as-is and this build produces nothing but type declarations for editors
+    // and `tsc` consumers. Inherits `moduleResolution: "bundler"` from the base
+    // config, which is what Bun itself uses — no NodeNext, no `.js` extensions.
+    "noEmit": false,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "noImplicitReturns": true,
-    "useUnknownInCatchVariables": true,
-    "exactOptionalPropertyTypes": true,
-    "skipLibCheck": true,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitOverride": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noPropertyAccessFromIndexSignature": false
+    "emitDeclarationOnly": true,
+    "outDir": "./types",
+    "rootDir": "./src"
   },
-  "include": ["src/index.ts", "src/links.ts"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "types", "tests"]
 }

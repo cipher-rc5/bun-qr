@@ -6,9 +6,11 @@
 bun-qr/
 |- .github/
 |  `- workflows/
-|     `- ci.yml
+|     |- ci.yml
+|     `- release.yml
 |- docs/
 |  |- CHANGELOG.md
+|  |- LINK_ENCODING.md
 |  |- structure.md
 |  |- summary.md
 |  `- tree.md
@@ -29,29 +31,51 @@ bun-qr/
 |  |  |- encoder.ts
 |  |  |- error-correction.ts
 |  |  |- layout.ts
-|  |  `- penalty.ts
+|  |  |- penalty.ts
+|  |  |- tables.ts
+|  |  `- utils.ts
 |  |- cli.ts
 |  |- decode.ts
 |  |- dom.ts
 |  |- index.ts
 |  `- links.ts
 |- tests/
+|  |- core/
+|  |  |- bitmap.test.ts
+|  |  |- encoder.test.ts
+|  |  |- error-correction.test.ts
+|  |  |- layout.test.ts
+|  |  `- penalty.test.ts
+|  |- fixtures/
+|  |  |- benchmark-fixtures.json
+|  |  |- link-fixtures.json
+|  |  `- qr-fixtures.json
 |  |- benchmark.ts
 |  |- cli.app.test.ts
 |  |- cli.args.test.ts
 |  |- index.test.ts
-|  `- fixtures/
+|  |- links.test.ts
+|  `- roundtrip.test.ts
+|- LICENSE
+|- LICENSE-MIT
+|- README.md
+|- SECURITY.md
+|- dprint.json
+|- justfile
 |- package.json
 |- tsconfig.json
+|- tsconfig.build.json
 `- bun.lock
 ```
 
 ## Module responsibilities
 
 - `src/index.ts`: stable public API surface and orchestration.
-- `src/core/*`: isolated QR internals (encoding, layout, penalty, bitmap, ECC).
+- `src/core/*`: isolated QR internals (encoding, layout, penalty, bitmap, ECC, lookup tables, shared utils).
 - `src/cli/*`: CLI layers separated by concern (parse, normalize, generate, present).
 - `src/links.ts`: structured payload helpers for common QR data formats.
+- `tests/core/*`: white-box unit tests for the individual core modules.
+- `tests/roundtrip.test.ts`: ISO/IEC 18004 structural verification independent of encoder internals.
 - `tests/fixtures/*`: deterministic fixture data for regression tests.
 
 ## Engineering conventions
@@ -66,8 +90,19 @@ bun-qr/
 
 ## CI
 
-`/.github/workflows/ci.yml` runs:
+`.github/workflows/ci.yml` runs on pushes to `main` and on pull requests.
+
+The `test` job:
 
 1. `bun install --frozen-lockfile`
-2. `bun run typecheck`
-3. `bun test`
+2. `bunx dprint check`
+3. `bun run typecheck`
+4. `bun run build`, then asserts `types/index.d.ts` and `types/links.d.ts` exist
+5. packs the tarball and imports it from a clean Bun consumer (`bun-qr` and `bun-qr/links`)
+6. `bun test --coverage`, uploading `coverage/` as an artifact
+
+The `benchmark` job runs only on `main`: `bun run bench`, uploading the output as an artifact.
+
+`.github/workflows/release.yml` triggers on `v*` tags. It repeats every CI gate, verifies the
+tag matches `package.json` version, packs the tarball with SHA-256 checksums, generates a
+CycloneDX SBOM, publishes to npm, and creates a GitHub Release with the artifacts attached.

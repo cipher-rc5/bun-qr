@@ -10,12 +10,14 @@
 - Decoder (`src/decode.ts`): scaffolded, not implemented yet
 - DOM helpers (`src/dom.ts`): scaffolded for future browser scanning support
 - Runtime/package manager/tooling: Bun only
+- Licensing: dual `MIT OR Apache-2.0`, inherited from the upstream `paulmillr/qr` fork;
+  both license files are carried over verbatim (see `LICENSE` and `LICENSE-MIT`)
 
 ## Key Capabilities
 
 - Multiple outputs: `raw`, `ascii`, `term`, `svg`, `gif`
 - Link/data helpers: URL, email, phone, SMS, vCard, WiFi, geo, calendar, WhatsApp, Bitcoin
-- CLI generation flow: `bun-qr <url> [--format] [--output]`
+- CLI generation flow: `bun-qr <url> [--format] [--output] [--size] [--force]`
 - Bun colorized terminal output via `Bun.color()`
 - Strict TypeScript configuration and deterministic fixture tests
 
@@ -34,7 +36,13 @@
 - Typecheck: `bun run typecheck`
 - Tests: `bun test`
 - Benchmarks: `bun run bench`
-- CI: `.github/workflows/ci.yml` runs install + typecheck + tests on push/PR
+- Formatting: `bunx dprint check` / `bunx dprint fmt`
+- CI: `.github/workflows/ci.yml` runs format check, typecheck, declaration build, a packed-tarball
+  import check, and `bun test --coverage` on push/PR, plus a `benchmark` job on `main`
+- Release: `.github/workflows/release.yml` publishes to npm with provenance on `v*` tags
+- Correctness oracle: `tests/roundtrip.test.ts` validates rendered symbols against ISO/IEC 18004
+  (format-information and version BCH codewords, pattern geometry, published capacity limits)
+  rather than against the encoder's own output
 
 ## Notes on Performance Data
 

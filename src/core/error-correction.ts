@@ -18,7 +18,8 @@ function interleave_bytes(blocks: Uint8Array[]): Uint8Array {
   let idx = 0;
   for (let i = 0;i < max_len;i++) {
     for (const block of blocks) {
-      if (i < block.length) result[idx++] = block[i];
+      // Guarded by `i < block.length`, so the read always resolves.
+      if (i < block.length) result[idx++] = block[i] ?? 0;
     }
   }
 
@@ -37,20 +38,32 @@ const GF = {
     }
     return { exp, log };
   })(0x11d),
-  exp: (x: number) => GF.tables.exp[x],
+  /** Read GF.tables.exp[i], rejecting out-of-range indices instead of yielding undefined/NaN. */
+  read_exp(i: number) {
+    const v = GF.tables.exp[i];
+    if (v === undefined) throw new Error(`GF.exp: index out of range=${i}`);
+    return v;
+  },
+  /** Read GF.tables.log[i], rejecting out-of-range indices instead of yielding undefined/NaN. */
+  read_log(i: number) {
+    const v = GF.tables.log[i];
+    if (v === undefined) throw new Error(`GF.log: index out of range=${i}`);
+    return v;
+  },
+  exp: (x: number) => GF.read_exp(x),
   log(x: number) {
     if (x === 0) throw new Error(`GF.log: invalid arg=${x}`);
-    return GF.tables.log[x] % 255;
+    return GF.read_log(x) % 255;
   },
   mul(x: number, y: number) {
     if (x === 0 || y === 0) return 0;
-    return GF.tables.exp[(GF.tables.log[x] + GF.tables.log[y]) % 255];
+    return GF.read_exp((GF.read_log(x) + GF.read_log(y)) % 255);
   },
   add: (x: number, y: number) => x ^ y,
-  pow: (x: number, e: number) => GF.tables.exp[(GF.tables.log[x] * e) % 255],
+  pow: (x: number, e: number) => GF.read_exp((GF.read_log(x) * e) % 255),
   inv(x: number) {
     if (x === 0) throw new Error(`GF.inverse: invalid arg=${x}`);
-    return GF.tables.exp[255 - GF.tables.log[x]];
+    return GF.read_exp(255 - GF.read_log(x));
   },
   polynomial(poly: number[]) {
     if (poly.length === 0) throw new Error('GF.polymomial: invalid length');
@@ -70,10 +83,13 @@ const GF = {
   coefficient: (a: readonly number[], degree: number) => a[GF.degree(a) - degree] ?? 0,
   mul_poly(a: number[], b: number[]) {
     if (a[0] === 0 || b[0] === 0) return [0];
+    // Every index below is bounded by the corresponding array's own length, and `res` is
+    // sized to cover i+j, so each `?? 0` is unreachable. 0 is also GF's additive identity,
+    // so it is the correct neutral value even if one were ever taken.
     const res = fill_arr(a.length + b.length - 1, 0);
     for (let i = 0;i < a.length;i++) {
       for (let j = 0;j < b.length;j++) {
-        res[i + j] = GF.add(res[i + j], GF.mul(a[i], b[j]));
+        res[i + j] = GF.add(res[i + j] ?? 0, GF.mul(a[i] ?? 0, b[j] ?? 0));
       }
     }
     return GF.polynomial(res);
@@ -82,14 +98,14 @@ const GF = {
     if (scalar === 0) return [0];
     if (scalar === 1) return a;
     const res = fill_arr(a.length, 0);
-    for (let i = 0;i < a.length;i++) res[i] = GF.mul(a[i], scalar);
+    for (let i = 0;i < a.length;i++) res[i] = GF.mul(a[i] ?? 0, scalar);
     return GF.polynomial(res);
   },
   mul_poly_monomial(a: number[], degree: number, coefficient: number) {
     if (degree < 0) throw new Error('GF.mul_poly_monomial: invalid degree');
     if (coefficient === 0) return [0];
     const res = fill_arr(a.length + degree, 0);
-    for (let i = 0;i < a.length;i++) res[i] = GF.mul(a[i], coefficient);
+    for (let i = 0;i < a.length;i++) res[i] = GF.mul(a[i] ?? 0, coefficient);
     return GF.polynomial(res);
   },
   add_poly(a: number[], b: number[]) {
@@ -101,19 +117,24 @@ const GF = {
     const sum_diff = fill_arr(larger.length, 0);
     const length_diff = larger.length - smaller.length;
     const s = larger.slice(0, length_diff);
-    for (let i = 0;i < s.length;i++) sum_diff[i] = s[i];
+    for (let i = 0;i < s.length;i++) sum_diff[i] = s[i] ?? 0;
     for (let i = length_diff;i < larger.length;i++) {
-      sum_diff[i] = GF.add(smaller[i - length_diff], larger[i]);
+      // i ranges over [length_diff, larger.length), so i - length_diff indexes `smaller`.
+      sum_diff[i] = GF.add(smaller[i - length_diff] ?? 0, larger[i] ?? 0);
     }
     return GF.polynomial(sum_diff);
   },
   remainder_poly(data: number[], divisor: number[]) {
     const out = Array.from(data);
+    // i stays below data.length - divisor.length + 1 and j below divisor.length, so i+j
+    // stays within `out` (length = data.length). Treating a missing/zero leading term as
+    // "skip" matches the original `elm === 0` short-circuit.
     for (let i = 0;i < data.length - divisor.length + 1;i++) {
       const elm = out[i];
-      if (elm === 0) continue;
+      if (elm === undefined || elm === 0) continue;
       for (let j = 1;j < divisor.length;j++) {
-        if (divisor[j] !== 0) out[i + j] = GF.add(out[i + j], GF.mul(divisor[j], elm));
+        const d = divisor[j];
+        if (d !== undefined && d !== 0) out[i + j] = GF.add(out[i + j] ?? 0, GF.mul(d, elm));
       }
     }
     return out.slice(data.length - divisor.length + 1, out.length);
@@ -125,8 +146,10 @@ const GF = {
   },
   eval_poly(poly: readonly number[], a: number) {
     if (a === 0) return GF.coefficient(poly, 0);
-    let res = poly[0];
-    for (let i = 1;i < poly.length;i++) res = GF.add(GF.mul(a, res), poly[i]);
+    // Polynomials reaching here come from GF.polynomial, which rejects empty input, so
+    // poly[0] exists. 0 is the additive identity and matches `coefficient`'s own fallback.
+    let res = poly[0] ?? 0;
+    for (let i = 1;i < poly.length;i++) res = GF.add(GF.mul(a, res), poly[i] ?? 0);
     return res;
   },
   /**
@@ -138,7 +161,7 @@ const GF = {
    *
    * Reference: ISO/IEC 18004:2015 Annex A; Berlekamp-Welch decoding algorithm.
    */
-  euclidian(a: number[], b: number[], R: number) {
+  euclidian(a: number[], b: number[], R: number): [number[], number[]] {
     if (GF.degree(a) < GF.degree(b)) [a, b] = [b, a];
     let r_last = a;
     let r = b;
@@ -149,12 +172,15 @@ const GF = {
       const t_last_last = t_last;
       r_last = r;
       t_last = t;
-      if (r_last[0] === 0) throw new Error('r_last[0] === 0');
+      // The leading term is read twice below; capture it once so the existing zero guard
+      // also covers the empty-polynomial case rather than yielding undefined.
+      const r_last_lead = r_last[0];
+      if (r_last_lead === undefined || r_last_lead === 0) throw new Error('r_last[0] === 0');
       r = r_last_last;
 
       let q = [0];
-      const dlt_inverse = GF.inv(r_last[0]);
-      while (GF.degree(r) >= GF.degree(r_last) && r[0] !== 0) {
+      const dlt_inverse = GF.inv(r_last_lead);
+      while (GF.degree(r) >= GF.degree(r_last) && r[0] !== undefined && r[0] !== 0) {
         const degree_diff = GF.degree(r) - GF.degree(r_last);
         const scale = GF.mul(r[0], dlt_inverse);
         q = GF.add_poly(q, GF.monomial(degree_diff, scale));
@@ -174,12 +200,16 @@ const GF = {
 };
 
 function RS(ecc_words: number): Coder<Uint8Array, Uint8Array> {
+  // The generator polynomial depends only on ecc_words, so build it once per coder
+  // instead of on every encode call.
+  const divisor = GF.divisor_poly(ecc_words);
+  const padding = fill_arr(divisor.length - 1, 0);
+
   return {
     encode(from: Uint8Array) {
-      const d = GF.divisor_poly(ecc_words);
       const pol = Array.from(from);
-      pol.push(...d.slice(0, -1).fill(0));
-      return Uint8Array.from(GF.remainder_poly(pol, d));
+      pol.push(...padding);
+      return Uint8Array.from(GF.remainder_poly(pol, divisor));
     },
     decode(to: Uint8Array) {
       const res = to.slice();
@@ -202,15 +232,20 @@ function RS(ecc_words: number): Coder<Uint8Array, Uint8Array> {
       }
       if (e !== locations.length) throw new Error('RS.decode: invalid errors number');
       for (let i = 0;i < locations.length;i++) {
-        const pos = res.length - 1 - GF.log(locations[i]);
-        if (pos < 0) throw new Error('RS.decode: invalid error location');
-        const xi_inverse = GF.inv(locations[i]);
+        // i and j are bounded by locations.length, so the reads always resolve.
+        const loc = locations[i] ?? 0;
+        const pos = res.length - 1 - GF.log(loc);
+        // `pos < 0` is genuinely reachable on corrupt input (GF.log can exceed the
+        // codeword length) and was already rejected. The upper bound is not reachable for
+        // QR-sized codewords but is checked so `res[pos]` below is a total read.
+        if (pos < 0 || pos >= res.length) throw new Error('RS.decode: invalid error location');
+        const xi_inverse = GF.inv(loc);
         let denominator = 1;
         for (let j = 0;j < locations.length;j++) {
           if (i === j) continue;
-          denominator = GF.mul(denominator, GF.add(1, GF.mul(locations[j], xi_inverse)));
+          denominator = GF.mul(denominator, GF.add(1, GF.mul(locations[j] ?? 0, xi_inverse)));
         }
-        res[pos] = GF.add(res[pos], GF.mul(GF.eval_poly(error_evaluator, xi_inverse), GF.inv(denominator)));
+        res[pos] = GF.add(res[pos] ?? 0, GF.mul(GF.eval_poly(error_evaluator, xi_inverse), GF.inv(denominator)));
       }
       return res;
     }
@@ -250,15 +285,27 @@ export function create_interleaver(capacity: CapacityInfo): Coder<Uint8Array, Ui
         blocks.push(new Uint8Array(words + block_len + (is_short ? 0 : 1)));
       }
 
+      // `blocks` was just built with exactly `num_blocks` entries and `data.length` was
+      // checked against `total` above, so every j and pos below is in range. The block is
+      // read into a local per iteration, which also avoids re-indexing `blocks`.
       let pos = 0;
       for (let i = 0;i < block_len;i++) {
-        for (let j = 0;j < num_blocks;j++) blocks[j][i] = data[pos++];
+        for (let j = 0;j < num_blocks;j++) {
+          const block = blocks[j];
+          if (block !== undefined) block[i] = data[pos] ?? 0;
+          pos++;
+        }
       }
-      for (let j = short_blocks;j < num_blocks;j++) blocks[j][block_len] = data[pos++];
+      for (let j = short_blocks;j < num_blocks;j++) {
+        const block = blocks[j];
+        if (block !== undefined) block[block_len] = data[pos] ?? 0;
+        pos++;
+      }
       for (let i = block_len;i < block_len + words;i++) {
         for (let j = 0;j < num_blocks;j++) {
-          const is_short = j < short_blocks;
-          blocks[j][i + (is_short ? 0 : 1)] = data[pos++];
+          const block = blocks[j];
+          if (block !== undefined) block[i + (j < short_blocks ? 0 : 1)] = data[pos] ?? 0;
+          pos++;
         }
       }
       const res: number[] = [];

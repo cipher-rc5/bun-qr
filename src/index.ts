@@ -71,13 +71,24 @@ const info = {
       kanji: [8, 10, 12],
       eci: [0, 0, 0]
     };
-    return table[type][info.size_type(ver)];
+    // size_type(ver) is floor((ver+7)/17), which is 0..2 for every valid version 1–40 and
+    // so always indexes the 3-tuple. `info` is publicly re-exported via `utils`, so an
+    // out-of-range version is rejected rather than silently yielding the wrong bit count.
+    const bits = table[type][info.size_type(ver)];
+    if (bits === undefined) throw new Error(`Invalid version=${ver}. Expected number [1..40]`);
+    return bits;
   },
   mode_bits: { numeric: '0001', alphanumeric: '0010', byte: '0100', kanji: '1000', eci: '0111' },
   capacity(ver: Version, ecc: ErrorCorrection) {
+    // `info` is re-exported via `utils`, so `ver` can arrive here unvalidated despite the
+    // branded type. The tables hold exactly 40 entries; without this check an out-of-range
+    // version silently produced NaN capacities instead of failing.
     const bytes = BYTES[ver - 1];
     const words = WORDS_PER_BLOCK[ecc][ver - 1];
     const num_blocks = ECC_BLOCKS[ecc][ver - 1];
+    if (bytes === undefined || words === undefined || num_blocks === undefined) {
+      throw new Error(`Invalid version=${ver}. Expected number [1..40]`);
+    }
     const block_len = Math.floor(bytes / num_blocks) - words;
     const short_blocks = num_blocks - (bytes % num_blocks);
     return {
@@ -192,6 +203,58 @@ export function validate_version(ver: number): Version {
   return ver as Version;
 }
 
+/**
+ * Number of bits the payload body occupies in the given mode, excluding the 4-bit mode
+ * indicator and the version-dependent character-count field.
+ *
+ * Mirrors the bit layout produced by `encode_payload`:
+ * - numeric: 10 bits per group of 3 digits, plus 4 bits for 1 leftover or 7 for 2
+ * - alphanumeric: 11 bits per pair, plus 6 for a leftover character
+ * - byte: 8 bits per UTF-8 byte
+ */
+function payload_bits(text: string, type: EncodingType, encoder: (value: string) => Uint8Array): { bits: number, length: number } {
+  if (type === 'numeric') {
+    const n = text.length;
+    const rem = n % 3;
+    return { bits: Math.floor(n / 3) * 10 + (rem === 1 ? 4 : rem === 2 ? 7 : 0), length: n };
+  }
+  if (type === 'alphanumeric') {
+    const n = text.length;
+    return { bits: Math.floor(n / 2) * 11 + (n % 2) * 6, length: n };
+  }
+  if (type === 'byte') {
+    const n = encoder(text).length;
+    return { bits: n * 8, length: n };
+  }
+  throw new Error('encode: unsupported type');
+}
+
+/**
+ * Find the smallest version whose data capacity fits the payload.
+ *
+ * Capacity is a closed-form function of version/ecc/mode/length, so this scans versions
+ * comparing bit counts directly rather than attempting a full encode per candidate and
+ * using thrown exceptions as control flow. Only a genuine capacity shortfall produces an
+ * error here; real internal faults propagate from the subsequent `encode` call.
+ */
+function select_version(
+  ecc: ErrorCorrection,
+  text: string,
+  encoding: EncodingType,
+  text_encoder: ((text: string) => Uint8Array) | undefined
+): Version {
+  const encoder = text_encoder ?? utf8_to_bytes;
+  const { bits, length } = payload_bits(text, encoding, encoder);
+
+  for (let i = 1;i <= 40;i++) {
+    const v = i as Version;
+    const needed = 4 + info.length_bits(v, encoding) + bits;
+    if (needed <= info.capacity(v, ecc).capacity) return v;
+  }
+  // Preserve the historical error surfaced when input exceeds even version 40.
+  throw new Error(`Capacity overflow: ${length} ${encoding === 'byte' ? 'bytes' : 'characters'} exceed the maximum for ecc=${ecc}`);
+}
+
 export type Output = 'raw' | 'ascii' | 'term' | 'gif' | 'svg';
 
 // Main QR code encoder (public API)
@@ -206,26 +269,13 @@ export function encode_qr(text: string, output: Output = 'raw', opts: QrOpts & S
   validate_encoding(encoding);
   if (opts.mask !== undefined) validate_mask(opts.mask as Mask);
 
-  let ver: Version | undefined;
-  let data: Uint8Array | undefined;
-  let err = new Error('Unknown error');
-
+  let ver: Version;
   if (opts.version !== undefined) {
     ver = validate_version(opts.version);
-    data = encode(ver, ecc, text, encoding, opts.text_encoder);
   } else {
-    for (let i = 1;i <= 40;i++) {
-      try {
-        const v = i as Version;
-        data = encode(v, ecc, text, encoding, opts.text_encoder);
-        ver = v;
-        break;
-      } catch (e) {
-        err = e as Error;
-      }
-    }
+    ver = select_version(ecc, text, encoding, opts.text_encoder);
   }
-  if (!ver || !data) throw err;
+  const data = encode(ver, ecc, text, encoding, opts.text_encoder);
   let res = draw_qr_best(ver, ecc, data, opts.mask as Mask);
   res.assert_drawn();
   const border = opts.border === undefined ? 2 : opts.border;
@@ -243,8 +293,26 @@ export function encode_qr(text: string, output: Output = 'raw', opts: QrOpts & S
 // Default export
 export default encode_qr;
 
-// Utility exports for advanced usage
+/**
+ * Low-level building blocks for callers implementing their own encoding pipeline.
+ *
+ * @remarks
+ * **Not covered by semantic versioning.** These are internals exposed for advanced use;
+ * their shapes track the encoder's implementation and may change in any release,
+ * including a patch. The stable public API is {@link encode_qr}, {@link validate_version},
+ * {@link utf8_to_bytes}, and the `bun-qr/links` subpath. Depend on this at your own risk.
+ */
 export const utils = { best, bin, draw_template, fill_arr, info, interleave, validate_version, zigzag };
 
-// Internal exports for testing
+/**
+ * White-box hooks for this package's own test suite.
+ *
+ * @remarks
+ * **Private. Not part of the public API and not covered by semantic versioning.**
+ * The leading underscore marks it as internal; it is exported only because the tests in
+ * `tests/` import it across module boundaries. It may be renamed, reshaped, or removed
+ * without notice. Do not import this from application code.
+ *
+ * @internal
+ */
 export const _tests = { Bitmap, info, detect_type, encode, draw_qr, penalty, PATTERNS };

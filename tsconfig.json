@@ -20,7 +20,7 @@
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": false,
+    "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     // Stricter flags — enabled for production quality
     "noUnusedLocals": true,

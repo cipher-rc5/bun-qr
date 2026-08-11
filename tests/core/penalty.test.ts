@@ -21,7 +21,7 @@ function make_bitmap(rows: string[]): Bitmap {
   const bm = new Bitmap({ height, width });
   for (let y = 0;y < height;y++) {
     for (let x = 0;x < width;x++) {
-      bm.data[y][x] = data[y]![x];
+      bm.data[y]![x] = data[y]![x];
     }
   }
   return bm;
@@ -121,8 +121,17 @@ describe('R3: finder-like pattern', () => {
     expect(calculate_row_finder_penalty(row)).toBe(40);
   });
 
-  test('row shorter than 11 → penalty 0', () => {
+  test('finder pattern flush against the row edge is penalized', () => {
+    // Pattern: 1 0 1 1 1 0 1 000 — only 3 light modules fit before the row ends.
+    // Per ISO/IEC 18004 §6.8.2.2 the 4 light modules may fall outside the symbol
+    // boundary, so this still scores 40 even though the row is shorter than 11.
     const row = [true, false, true, true, true, false, true, false, false, false];
+    expect(calculate_row_finder_penalty(row)).toBe(40);
+  });
+
+  test('finder core with no light margin at all → penalty 0', () => {
+    // 1011101 with dark modules on both sides: not a finder-like pattern.
+    const row = [true, true, true, false, true, true, true, false, true, true, true, true];
     expect(calculate_row_finder_penalty(row)).toBe(0);
   });
 

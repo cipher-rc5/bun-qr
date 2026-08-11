@@ -1,8 +1,13 @@
-import { helpText, parseCliArgs } from './args-parser';
+import { helpText, MissingUrlError, parseCliArgs } from './args-parser';
 import { BunQrGenerator } from './qr-generator';
 import { BunTerminalPresenter } from './terminal-presenter';
 import type { CliArgs, OutputPresenter, QrGenerator, UrlNormalizer } from './types';
 import { DefaultUrlNormalizer } from './url-normalizer';
+
+export const EXIT_OK = 0;
+export const EXIT_ERROR = 1;
+/** Usage error: invoked with no url. Distinct from a runtime failure so scripts can tell them apart. */
+export const EXIT_USAGE = 2;
 
 export class QrCliApplication {
   constructor (
@@ -17,13 +22,21 @@ export class QrCliApplication {
     try {
       args = parseCliArgs(argv);
     } catch (error: unknown) {
-      const message = this.errorMessage(error);
-      if (message === helpText()) {
-        this.presenter.printInfo(message);
-        return 0;
+      // Missing <url> is a usage error: help goes to stderr and the exit code is non-zero
+      // so callers can detect it. Other parse failures are plain errors.
+      if (error instanceof MissingUrlError) {
+        this.presenter.printError(error.message);
+        this.presenter.printError(helpText());
+        return EXIT_USAGE;
       }
-      this.presenter.printError(message);
-      return 1;
+      this.presenter.printError(this.errorMessage(error));
+      return EXIT_ERROR;
+    }
+
+    // --help is an explicit success path: help on stdout, exit 0.
+    if (args.help) {
+      this.presenter.printInfo(helpText());
+      return EXIT_OK;
     }
 
     try {
@@ -31,10 +44,10 @@ export class QrCliApplication {
       const output = this.generator.generate(normalized, args.format, args.size);
       await this.handleOutput(args, output);
       this.presenter.printSuccess('QR generation completed.');
-      return 0;
+      return EXIT_OK;
     } catch (error: unknown) {
       this.presenter.printError(this.errorMessage(error));
-      return 1;
+      return EXIT_ERROR;
     }
   }
 
@@ -47,8 +60,33 @@ export class QrCliApplication {
 
     const extension = args.format === 'gif' ? 'gif' : 'svg';
     const outputPath = args.outputPath ?? `qr-code.${extension}`;
+
+    // Refuse to clobber existing files unless the user explicitly opted in with --force.
+    // The check runs against the resolved path: Bun.write resolves `..` and creates missing
+    // intermediate directories, but Bun.file(...).exists() on an unresolved traversing path
+    // reports false, which would let the guard be bypassed.
+    if (!args.force && await Bun.file(this.resolvePath(outputPath)).exists()) {
+      throw new Error(
+        `Refusing to overwrite existing file: ${outputPath}. Pass --force (-F) to overwrite it, or choose a different --output path.`
+      );
+    }
+
     await Bun.write(outputPath, output);
-    this.presenter.printInfo(`Saved QR file to ${outputPath}`);
+    this.presenter.printSuccess(`Saved QR file to ${outputPath}`);
+  }
+
+  /**
+   * Lexically resolve `.` and `..` against the cwd without touching the filesystem,
+   * so the overwrite guard sees the same file Bun.write would target.
+   */
+  private resolvePath(path: string): string {
+    try {
+      const base = Bun.pathToFileURL(`${process.cwd()}/`);
+      return Bun.fileURLToPath(new URL(path, base));
+    } catch {
+      // Fall back to the raw path if it is not URL-representable.
+      return path;
+    }
   }
 
   private errorMessage(error: unknown): string {

@@ -1,8 +1,8 @@
 # bun-qr
 
-Codebase forked from the work of [paulmillr](https://github.com/paulmillr). Original codebase is available [https://github.com/paulmillr/qr](https://github.com/paulmillr/qr).
+Forked from [paulmillr/qr](https://github.com/paulmillr/qr) by [paulmillr](https://github.com/paulmillr), and distributed under the same dual `MIT OR Apache-2.0` terms.
 
-QR code generator built using the bun runtime. Zero dependencies, strict TypeScript, with multiple output formats, CLI support, and built-in link encoding utilities. Instance is a fork of the work
+QR code generator built using the bun runtime. Zero dependencies, strict TypeScript, with multiple output formats, CLI support, and built-in link encoding utilities. This project is a fork of paulmillr's `qr`, retargeted at the Bun runtime and toolchain, with a snake_case API, a Bun-native CLI, and link encoding helpers added.
 
 ## Features
 
@@ -16,9 +16,25 @@ QR code generator built using the bun runtime. Zero dependencies, strict TypeScr
 - Multiple output formats: ASCII, Terminal, SVG, GIF, Raw
 - Snake_case API for Rust compatibility
 - Comprehensive error correction support
-- CI with Bun typecheck + test
+- Encoding verified against ISO/IEC 18004 by an independent spec oracle, not just golden hashes
+- CI with format check, typecheck, declaration build, packaged-import check, and coverage
 
 ## Installation
+
+### As a dependency
+
+```bash
+bun add bun-qr
+```
+
+```typescript
+import encode_qr from 'bun-qr';
+import { encode_wifi } from 'bun-qr/links';
+```
+
+The package ships TypeScript sources and is resolved through the `bun` export condition, so Bun runs `src/` directly. Type declarations are emitted for editors and `tsc` consumers.
+
+### From source
 
 ```bash
 git clone https://github.com/cipher-rc5/bun-qr.git
@@ -34,17 +50,34 @@ Generate QR codes from URLs directly from the terminal using Bun runtime and API
 bun run qr -- https://bun.com
 bun run qr -- bun.com --format gif --output bun.gif
 bun run qr -- https://bun.sh --format term
+bun run qr -- https://bun.sh --size 128 --output bun-128.svg
 ```
-
-- Supports `svg`, `gif`, `ascii`, and `term` outputs
-- Uses Bun-native colorized terminal messages via `Bun.color()`
-- Auto-normalizes URLs by adding `https://` when missing
 
 You can also run the binary name directly after install:
 
 ```bash
-bun-qr https://bun.com --format svg --output bun.svg
+bunx bun-qr https://bun.com --format svg --output bun.svg
 ```
+
+### Options
+
+| Flag                                   | Description                                    |
+| -------------------------------------- | ---------------------------------------------- |
+| `-f, --format <svg\|gif\|ascii\|term>` | Output format (default: `svg`)                 |
+| `-o, --output <path>`                  | Output file for `svg`/`gif` formats            |
+| `-s, --size <pixels>`                  | Output size in pixels, `1`–`4000` (svg only)   |
+| `-F, --force`                          | Overwrite the output file if it already exists |
+| `-h, --help`                           | Show help                                      |
+| `--`                                   | Treat all following arguments as positional    |
+
+Behaviour notes:
+
+- Unknown options are rejected rather than ignored; a missing `<url>` argument exits non-zero with a usage error.
+- `--size` applies to SVG output only, and is bounded by the `MAX_QR_PIXELS` raster guard (4000 x 4000).
+- Without `--force`, the CLI refuses to overwrite an existing output file.
+- Status and error messages go to stderr, so `stdout` stays clean for piping `ascii`/`term` output.
+- Colorization uses `Bun.color()` and is disabled automatically when stdout is not a TTY.
+- URLs are auto-normalized by adding `https://` when the scheme is missing.
 
 ## Development
 
@@ -58,6 +91,12 @@ bun run bench
 - `typecheck`: strict TypeScript validation
 - `test`: unit and fixture regression tests
 - `bench`: Bun runtime benchmark suite
+- `fmt` / `fmt:check`: dprint formatting
+- `build`: declaration-only emit for editors and `tsc` consumers
+
+A [`justfile`](justfile) wraps the same commands: `just` (typecheck + test), `just ci`
+(everything CI enforces), plus `typecheck`, `test`, `coverage`, `bench`, `fmt`,
+`fmt-check`, `build`, `verify-package`, and `clean`.
 
 ## Architecture
 
@@ -68,22 +107,33 @@ The core encoder has been separated by concern (SOLID-oriented modules):
 - `src/core/error-correction.ts`: GF math + Reed-Solomon + interleaving
 - `src/core/encoder.ts`: payload type detection and bitstream encoding
 - `src/core/penalty.ts`: mask penalty scoring
+- `src/core/tables.ts`: capacity and ECC lookup tables (ISO/IEC 18004 Annex I)
+- `src/core/utils.ts`: shared helpers (`bin`, `fill_arr`, `best`, `alphabet`)
 - `src/index.ts`: public API facade and orchestration
 
 ## Fixtures, Tests, and Benchmarks
 
 - Deterministic fixtures live in `tests/fixtures/`
-- QR fixture tests validate output length + SHA-256 stability
+- QR fixture tests validate output length + SHA-256 stability (change detection, not correctness — see the note in `tests/index.test.ts`)
+- `tests/roundtrip.test.ts` verifies rendered symbols against ISO/IEC 18004 independently of the encoder's internals: format-information BCH(15,5), version BCH(18,6), pattern geometry, and published byte capacities
+- `tests/core/bitmap.test.ts` covers the four renderers, the geometry primitives, and the `MAX_QR_PIXELS` guard
 - Link fixture tests validate canonical URL/email/WiFi encodings
 - Benchmarks are defined in `tests/benchmark.ts` and run with `bun run bench`
 
 ## CI
 
-GitHub Actions workflow at `.github/workflows/ci.yml` runs on push/PR:
+`.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. The `test` job:
 
 - `bun install --frozen-lockfile`
+- `bunx dprint check` (format check)
 - `bun run typecheck`
-- `bun test`
+- `bun run build` (declaration emit) and verification that `types/index.d.ts` and `types/links.d.ts` exist
+- packs the tarball and verifies it imports cleanly from a fresh Bun consumer (both `bun-qr` and `bun-qr/links`)
+- `bun test --coverage`, uploading the `coverage/` directory as an artifact
+
+A second `benchmark` job runs only on `main`; it executes `bun run bench` and uploads the results as an artifact.
+
+`.github/workflows/release.yml` triggers on `v*` tags. It re-runs every CI gate, verifies the tag matches `package.json` version, packs the tarball with SHA-256 checksums, generates a CycloneDX SBOM, publishes to npm, and creates a GitHub Release with the artifacts attached.
 
 ## Quick Start
 
@@ -104,7 +154,7 @@ console.log(term);
 const svg = encode_qr(text, 'svg');
 await Bun.write('qr.svg', svg);
 
-// GIF image (uncompressed)
+// GIF image (LZW-compressed, 2-color palette)
 const gif = encode_qr(text, 'gif');
 await Bun.write('qr.gif', gif);
 
@@ -165,18 +215,16 @@ const geo_qr = encode_qr(location, 'svg');
 
 ## Decoding QR Codes
 
-Decoder APIs are currently scaffolded and not fully implemented yet.
+**Not implemented.** This library encodes only.
 
-```typescript
-import { decode_qr } from 'bun-qr/decode';
+`src/decode.ts` is an unimplemented scaffold: `decode_qr()` unconditionally throws
+`QR decoder not yet implemented`. There is no image-loading helper, the module is
+deliberately not listed in the `exports` map, and it is excluded from the published
+package entirely — so `bun-qr/decode` does not resolve and the file is not present in an
+installed copy. It exists only in the repository, as future work. Do not depend on it.
+Decoding is tracked as roadmap item 1 in `docs/summary.md`.
 
-// From file
-const file = Bun.file('qr-code.png');
-const buffer = await file.arrayBuffer();
-const image = decode_image(buffer); // Helper function
-const result = decode_qr(image);
-console.log(result);
-```
+If you need to read QR codes today, use a dedicated decoder library.
 
 ## API
 
@@ -196,15 +244,22 @@ Generate a QR code.
   - `border`: Border size in modules (default: 2)
   - `scale`: Scale factor (default: 1)
   - `optimize`: For SVG, use optimized path (default: true)
+  - `text_encoder`: Custom string-to-bytes encoder, `(text: string) => Uint8Array` (default: UTF-8 via `TextEncoder`)
 
-### `decode_qr(image, options?)`
+#### `text_encoder`
 
-Read a QR code from an image.
+Overrides how `text` is converted to bytes in `byte` encoding mode — useful for legacy
+target charsets such as Shift_JIS or ISO-8859-1.
 
-**Parameters:**
+```typescript
+const latin1 = (text: string) => Uint8Array.from(text, (ch) => ch.charCodeAt(0) & 0xff);
+const svg = encode_qr('café', 'svg', { encoding: 'byte', text_encoder: latin1 });
+```
 
-- `image`: Image object with `width`, `height`, and `data` (Uint8Array)
-- `options`: Optional decoding configuration
+> **Security:** this callback receives the raw, potentially untrusted `text` argument.
+> Keep it a pure string-to-bytes transform — never `eval` it, use it to build shell or SQL
+> strings, or let it perform I/O. A `text_encoder` that returns more bytes than the chosen
+> version can hold causes encoding to fail rather than silently truncate.
 
 ### Link Encoding Functions
 
@@ -248,4 +303,18 @@ Built specifically for Bun's high-performance JavaScript runtime, this library l
 
 ## License
 
-Dual-licensed under Apache 2.0 OR MIT
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE](LICENSE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.
+
+This project is a fork of [paulmillr/qr](https://github.com/paulmillr/qr), which is
+distributed under the same dual `MIT OR Apache-2.0` terms. Both license files are carried
+over verbatim from upstream, preserving the original copyright notice as those terms
+require.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for
+inclusion in this work shall be dual licensed as above, without any additional terms or
+conditions.

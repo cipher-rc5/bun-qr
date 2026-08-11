@@ -68,9 +68,10 @@ export interface CalendarEventOptions {
 
 // Validation helpers
 
-const SAFE_URL_SCHEMES = new Set(['http:', 'https:']);
+/** Allowlist of URL schemes permitted in QR payloads. Blocks javascript:, data:, file:, ftp:, etc. */
+export const SAFE_URL_SCHEMES: ReadonlySet<string> = new Set(['http:', 'https:']);
 
-function validate_url(url: string): boolean {
+export function validate_url(url: string): boolean {
   try {
     const parsed = new URL(url);
     return SAFE_URL_SCHEMES.has(parsed.protocol);
