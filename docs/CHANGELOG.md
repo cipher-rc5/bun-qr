@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Benchmark suite in `tests/benchmark.ts` (`bun run bench`).
 - GitHub Actions CI workflow (`.github/workflows/ci.yml`) with format check, typecheck, test coverage, and benchmark artifact upload.
 - GitHub Actions release workflow (`.github/workflows/release.yml`) triggered on `v*` tags; publishes to npm with provenance.
-- `Makefile` with targets: `all`, `typecheck`, `test`, `bench`, `fmt`, `fmt-check`, `build`, `clean`.
+- `justfile` with recipes: `default` (typecheck + test), `ci`, `typecheck`, `test`, `coverage`, `bench`, `fmt`, `fmt-check`, `build`, `verify-package`, `clean`.
 - `SECURITY.md` describing responsible disclosure via GitHub Private Security Advisory.
 - `tsconfig.build.json` for library distribution builds (`NodeNext`, declarations, `dist/` output).
 - `src/core/tables.ts`: extracted `BYTES`, `WORDS_PER_BLOCK`, `ECC_BLOCKS` lookup tables.
@@ -32,14 +32,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit tests: `tests/core/error-correction.test.ts`, `tests/core/penalty.test.ts`, `tests/core/layout.test.ts`, `tests/core/encoder.test.ts`.
 - `"test"`, `"build"`, `"fmt"`, `"fmt:check"`, and `"prepublishOnly"` scripts in `package.json`.
 - `"files"`, `"engines"`, and `"module"` fields in `package.json`; removed `"private": true`.
+- `--size` / `-s` CLI flag setting SVG output dimensions in pixels, bounded to 1–4000 by `MAX_CLI_SIZE` (commit `3114a4b`).
+- `--force` / `-F` CLI flag; without it the CLI now refuses to overwrite an existing output file.
+- `--` end-of-options separator; all following arguments are treated as positional.
+- `LICENSE` (Apache-2.0) and `LICENSE-MIT`, preserving the upstream `paulmillr/qr` copyright notice, plus a `"license": "(Apache-2.0 OR MIT)"` field in `package.json`. The package previously shipped no license file at all despite the README claiming dual licensing.
+- `tests/roundtrip.test.ts`: independent ISO/IEC 18004 verification of rendered symbols — format-information BCH(15,5), version BCH(18,6), function-pattern geometry, and published byte-capacity limits.
+- `tests/core/bitmap.test.ts`: coverage for all four renderers, geometry primitives, and the `MAX_QR_PIXELS` guard.
 
 ### Changed
 
+- CLI now rejects unknown options instead of silently ignoring them.
+- CLI status and success messages moved to stderr so `stdout` stays clean for piping; a missing `<url>` now exits with code 2 (usage) rather than 0.
+- Terminal colorization is disabled automatically when the stream is not a TTY.
+- `.gitignore` now covers `outputs/` and the default CLI output filenames (`qr-code.svg`, `qr-code.gif`) (commit `b902a85`).
+- Applied dprint formatting across all source files (commits `f651a3a`, `f4a85ad`).
 - Strengthened `tsconfig.json`: `noUnusedLocals` and `noUnusedParameters` enabled.
 - `get_size()` in `src/dom.ts` now uses `getComputedStyle` instead of `.offsetWidth`/`.offsetHeight` and throws a descriptive error on non-positive dimensions.
 - GIF output is now ~7–8× smaller due to correct LZW compression replacing the previous uncompressed pixel dump.
 - `QrOpts.version` remains `number | undefined` in the public API; validated internally via `validate_version()`.
-- Peer dependency relaxed to `"typescript": "^5.0.0 || ^6.0.0"`.
+- Peer dependency on `typescript` relaxed to `">=5.0.0"` and marked optional via `peerDependenciesMeta`.
 
 ### Fixed
 
@@ -53,7 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - URL validation in `src/links.ts` now rejects `javascript:`, `data:`, and other non-HTTP/HTTPS schemes.
 - GIF fixture in `tests/fixtures/qr-fixtures.json` updated to reflect LZW-compressed output (`length: 171`).
 
-## [0.1.0]
+## [0.1.0] — unreleased
+
+`package.json` carries version `0.1.0`, but this version has never been tagged or
+published; no git tags exist in the repository. The entries below describe the initial
+implementation as it stands on `main`.
 
 ### Added
 
@@ -63,5 +78,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Core modules: `src/core/bitmap.ts`, `src/core/layout.ts`, `src/core/error-correction.ts`, `src/core/encoder.ts`, `src/core/penalty.ts`.
 - Strict TypeScript configuration.
 
-[Unreleased]: https://github.com/cipher-rc5/bun-qr/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/cipher-rc5/bun-qr/releases/tag/v0.1.0
+<!--
+  No comparison/release links yet: the repository has no git tags, so
+  `compare/v0.1.0...HEAD` and `releases/tag/v0.1.0` would both 404. Add them
+  once the first `v*` tag is pushed and the release workflow has run.
+-->
+
+[Unreleased]: https://github.com/cipher-rc5/bun-qr/commits/main

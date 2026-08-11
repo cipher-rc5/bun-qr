@@ -1,7 +1,7 @@
 // file: src/core/utils.ts
 // description: internal utility functions shared across QR encoding modules
 
-interface AlphabetCoder<F, T> {
+export interface AlphabetCoder<F, T> {
   encode(from: F): T;
   decode(to: T): F;
   has(char: string): boolean;

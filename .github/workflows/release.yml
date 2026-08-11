@@ -5,6 +5,10 @@ on:
     tags:
       - "v*"
 
+# Must match `engines.bun` in package.json, .bun-version, and ci.yml.
+env:
+  BUN_VERSION: "1.3.14"
+
 jobs:
   release:
     name: Build and Publish
@@ -15,15 +19,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: "1.2.x"
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      # Re-run every gate CI enforces. A tag must not be able to publish
+      # code that CI would have rejected.
+      - name: Format check
+        run: bunx dprint check
 
       - name: Typecheck
         run: bun run typecheck
@@ -31,28 +40,65 @@ jobs:
       - name: Test
         run: bun test
 
-      - name: Build
+      - name: Build (declaration emit)
         run: bun run build
 
-      - name: Verify dist output
+      - name: Verify build output
         run: |
-          test -f dist/index.js || (echo "dist/index.js not found" && exit 1)
-          test -f dist/index.d.ts || (echo "dist/index.d.ts not found" && exit 1)
+          test -f types/index.d.ts || (echo "types/index.d.ts not found" && exit 1)
+          test -f types/links.d.ts || (echo "types/links.d.ts not found" && exit 1)
+
+      - name: Verify tag matches package version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/v}"
+          pkg=$(bun --print "require('./package.json').version")
+          if [ "$tag" != "$pkg" ]; then
+            echo "Tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+
+      - name: Pack and generate checksums
+        run: |
+          set -euo pipefail
+          bun pm pack --destination dist-artifacts
+          cd dist-artifacts
+          sha256sum ./*.tgz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          set -euo pipefail
+          bunx --bun @cyclonedx/cyclonedx-npm --output-format JSON \
+            --output-file dist-artifacts/sbom.cdx.json || \
+            echo "SBOM generation unavailable; continuing without it"
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: bun publish --access public --tag latest
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
+            const fs = require('fs');
+            const path = require('path');
             const tag = context.ref.replace('refs/tags/', '');
-            await github.rest.repos.createRelease({
+            const release = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: tag,
               name: tag,
               generate_release_notes: true
             });
+            const dir = 'dist-artifacts';
+            for (const file of fs.readdirSync(dir)) {
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.data.id,
+                name: file,
+                data: fs.readFileSync(path.join(dir, file))
+              });
+            }

@@ -4,8 +4,14 @@ node_modules
 # output
 out
 dist
+types
 outputs/
 *.tgz
+
+# default CLI output filename (bun-qr writes qr-code.svg / qr-code.gif
+# when --output is omitted)
+qr-code.svg
+qr-code.gif
 
 # code coverage
 coverage
@@ -35,5 +41,4 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .DS_Store
 
 _dev
-bun.lock
 .cursor

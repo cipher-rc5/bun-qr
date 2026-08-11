@@ -37,20 +37,32 @@ const GF = {
     }
     return { exp, log };
   })(0x11d),
-  exp: (x: number) => GF.tables.exp[x],
+  /** Read GF.tables.exp[i], rejecting out-of-range indices instead of yielding undefined/NaN. */
+  read_exp(i: number) {
+    const v = GF.tables.exp[i];
+    if (v === undefined) throw new Error(`GF.exp: index out of range=${i}`);
+    return v;
+  },
+  /** Read GF.tables.log[i], rejecting out-of-range indices instead of yielding undefined/NaN. */
+  read_log(i: number) {
+    const v = GF.tables.log[i];
+    if (v === undefined) throw new Error(`GF.log: index out of range=${i}`);
+    return v;
+  },
+  exp: (x: number) => GF.read_exp(x),
   log(x: number) {
     if (x === 0) throw new Error(`GF.log: invalid arg=${x}`);
-    return GF.tables.log[x] % 255;
+    return GF.read_log(x) % 255;
   },
   mul(x: number, y: number) {
     if (x === 0 || y === 0) return 0;
-    return GF.tables.exp[(GF.tables.log[x] + GF.tables.log[y]) % 255];
+    return GF.read_exp((GF.read_log(x) + GF.read_log(y)) % 255);
   },
   add: (x: number, y: number) => x ^ y,
-  pow: (x: number, e: number) => GF.tables.exp[(GF.tables.log[x] * e) % 255],
+  pow: (x: number, e: number) => GF.read_exp((GF.read_log(x) * e) % 255),
   inv(x: number) {
     if (x === 0) throw new Error(`GF.inverse: invalid arg=${x}`);
-    return GF.tables.exp[255 - GF.tables.log[x]];
+    return GF.read_exp(255 - GF.read_log(x));
   },
   polynomial(poly: number[]) {
     if (poly.length === 0) throw new Error('GF.polymomial: invalid length');
@@ -174,12 +186,16 @@ const GF = {
 };
 
 function RS(ecc_words: number): Coder<Uint8Array, Uint8Array> {
+  // The generator polynomial depends only on ecc_words, so build it once per coder
+  // instead of on every encode call.
+  const divisor = GF.divisor_poly(ecc_words);
+  const padding = fill_arr(divisor.length - 1, 0);
+
   return {
     encode(from: Uint8Array) {
-      const d = GF.divisor_poly(ecc_words);
       const pol = Array.from(from);
-      pol.push(...d.slice(0, -1).fill(0));
-      return Uint8Array.from(GF.remainder_poly(pol, d));
+      pol.push(...padding);
+      return Uint8Array.from(GF.remainder_poly(pol, divisor));
     },
     decode(to: Uint8Array) {
       const res = to.slice();

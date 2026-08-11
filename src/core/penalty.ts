@@ -2,7 +2,10 @@ import { Bitmap } from './bitmap';
 
 const R1_RUN_LENGTH_THRESHOLD = 5;
 const R2_BLOCK_PENALTY = 3;
-const R3_FINDER_PATTERN_LENGTH = 11;
+/** The 1011101 core of the finder-like pattern; must lie inside the symbol. */
+const R3_FINDER_CORE_LENGTH = 7;
+/** The 4 adjacent light modules; may fall outside the symbol (ISO/IEC 18004 §6.8.2.2). */
+const R3_FINDER_LIGHT_LENGTH = 4;
 const R3_FINDER_PENALTY = 40;
 const R4_BALANCE_STEP_PERCENT = 5;
 const R4_BALANCE_STEP_POINTS = 10;
@@ -31,15 +34,15 @@ function calculate_row_run_penalty(row_bits: readonly boolean[]): number {
   return penalty;
 }
 
-function calculate_column_run_penalty(bitmap: readonly boolean[][], column_index: number, column_height: number): number {
+function calculate_column_run_penalty(matrix: readonly boolean[][], column_index: number, column_height: number): number {
   if (column_height <= 1) return 0;
 
   let penalty = 0;
   let run_length = 1;
-  let previous_color = bitmap[0][column_index];
+  let previous_color = matrix[0][column_index];
 
   for (let y = 1;y < column_height;y++) {
-    const current_color = bitmap[y][column_index];
+    const current_color = matrix[y][column_index];
     if (current_color === previous_color) {
       run_length++;
     } else {
@@ -54,78 +57,50 @@ function calculate_column_run_penalty(bitmap: readonly boolean[][], column_index
   return penalty;
 }
 
-function calculate_row_finder_penalty(row_bits: readonly boolean[]): number {
-  const row_length = row_bits.length;
-  if (row_length < R3_FINDER_PATTERN_LENGTH) return 0;
+/**
+ * Scan a single line (row or column) for the 1:1:3:1:1 finder-like pattern of rule 3.
+ *
+ * `at(i)` reads the module at index `i` along the line. Per ISO/IEC 18004 §6.8.2.2 the four
+ * light modules adjacent to the 1011101 core may fall *outside* the symbol boundary, so the
+ * scan window starts at -4 and ends at `line_length - 7`, and out-of-range indices are read
+ * as light. The 7 core modules must always lie within the symbol.
+ */
+function calculate_line_finder_penalty(line_length: number, at: (i: number) => boolean): number {
+  if (line_length < R3_FINDER_CORE_LENGTH) return 0;
+
+  // Out-of-symbol modules count as light, per §6.8.2.2.
+  const read = (i: number): boolean => (i < 0 || i >= line_length ? false : at(i));
+
+  const is_light_run = (start: number): boolean => {
+    for (let i = start;i < start + R3_FINDER_LIGHT_LENGTH;i++) {
+      if (read(i)) return false;
+    }
+    return true;
+  };
 
   let penalty = 0;
-  const last_start = row_length - R3_FINDER_PATTERN_LENGTH;
+  const last_core_start = line_length - R3_FINDER_CORE_LENGTH;
 
-  for (let i = 0;i <= last_start;i++) {
-    const light_4_then_finder_7 = !row_bits[i] &&
-      !row_bits[i + 1] &&
-      !row_bits[i + 2] &&
-      !row_bits[i + 3] &&
-      row_bits[i + 4] &&
-      !row_bits[i + 5] &&
-      row_bits[i + 6] &&
-      row_bits[i + 7] &&
-      row_bits[i + 8] &&
-      !row_bits[i + 9] &&
-      row_bits[i + 10];
+  for (let i = 0;i <= last_core_start;i++) {
+    // The 1011101 core must lie entirely inside the symbol.
+    const is_core = read(i) && !read(i + 1) && read(i + 2) && read(i + 3) && read(i + 4) && !read(i + 5) && read(i + 6);
+    if (!is_core) continue;
 
-    const finder_7_then_light_4 = row_bits[i] &&
-      !row_bits[i + 1] &&
-      row_bits[i + 2] &&
-      row_bits[i + 3] &&
-      row_bits[i + 4] &&
-      !row_bits[i + 5] &&
-      row_bits[i + 6] &&
-      !row_bits[i + 7] &&
-      !row_bits[i + 8] &&
-      !row_bits[i + 9] &&
-      !row_bits[i + 10];
-
-    if (light_4_then_finder_7 || finder_7_then_light_4) penalty += R3_FINDER_PENALTY;
+    // 4 light modules on either side qualify. A core flanked on both sides is a single
+    // occurrence and is scored once, matching the behaviour for interior patterns.
+    if (is_light_run(i - R3_FINDER_LIGHT_LENGTH) || is_light_run(i + R3_FINDER_CORE_LENGTH)) {
+      penalty += R3_FINDER_PENALTY;
+    }
   }
   return penalty;
 }
 
-function calculate_column_finder_penalty(matrix: readonly boolean[][], row_index: number, width: number): number {
-  if (width < R3_FINDER_PATTERN_LENGTH) return 0;
+function calculate_row_finder_penalty(row_bits: readonly boolean[]): number {
+  return calculate_line_finder_penalty(row_bits.length, (i) => row_bits[i]);
+}
 
-  let penalty = 0;
-  const y = row_index;
-  const last_start = width - R3_FINDER_PATTERN_LENGTH;
-
-  for (let x = 0;x <= last_start;x++) {
-    const light_4_then_finder_7 = !matrix[x][y] &&
-      !matrix[x + 1][y] &&
-      !matrix[x + 2][y] &&
-      !matrix[x + 3][y] &&
-      matrix[x + 4][y] &&
-      !matrix[x + 5][y] &&
-      matrix[x + 6][y] &&
-      matrix[x + 7][y] &&
-      matrix[x + 8][y] &&
-      !matrix[x + 9][y] &&
-      matrix[x + 10][y];
-
-    const finder_7_then_light_4 = matrix[x][y] &&
-      !matrix[x + 1][y] &&
-      matrix[x + 2][y] &&
-      matrix[x + 3][y] &&
-      matrix[x + 4][y] &&
-      !matrix[x + 5][y] &&
-      matrix[x + 6][y] &&
-      !matrix[x + 7][y] &&
-      !matrix[x + 8][y] &&
-      !matrix[x + 9][y] &&
-      !matrix[x + 10][y];
-
-    if (light_4_then_finder_7 || finder_7_then_light_4) penalty += R3_FINDER_PENALTY;
-  }
-  return penalty;
+function calculate_column_finder_penalty(matrix: readonly boolean[][], column_index: number, column_height: number): number {
+  return calculate_line_finder_penalty(column_height, (y) => matrix[y][column_index]);
 }
 
 export function calculate_penalty(bitmap: Bitmap): number {
@@ -135,32 +110,33 @@ export function calculate_penalty(bitmap: Bitmap): number {
 
   if (width === 0 || height === 0) return 0;
 
+  // Bitmap stores data row-major: matrix[y][x].
   let run_penalty = 0;
-  for (let x = 0;x < width;x++) run_penalty += calculate_row_run_penalty(matrix[x]);
-  for (let y = 0;y < height;y++) run_penalty += calculate_column_run_penalty(matrix, y, width);
+  for (let y = 0;y < height;y++) run_penalty += calculate_row_run_penalty(matrix[y]);
+  for (let x = 0;x < width;x++) run_penalty += calculate_column_run_penalty(matrix, x, height);
 
   let block_penalty = 0;
   const last_col = width - 1;
   const last_row = height - 1;
-  for (let x = 0;x < last_col;x++) {
-    const col = matrix[x];
-    const next_col = matrix[x + 1];
-    for (let y = 0;y < last_row;y++) {
-      const cell = col[y];
-      if (cell === next_col[y] && cell === col[y + 1] && cell === next_col[y + 1]) {
+  for (let y = 0;y < last_row;y++) {
+    const row = matrix[y];
+    const next_row = matrix[y + 1];
+    for (let x = 0;x < last_col;x++) {
+      const cell = row[x];
+      if (cell === row[x + 1] && cell === next_row[x] && cell === next_row[x + 1]) {
         block_penalty += R2_BLOCK_PENALTY;
       }
     }
   }
 
   let finder_penalty = 0;
-  for (let x = 0;x < width;x++) finder_penalty += calculate_row_finder_penalty(matrix[x]);
-  for (let y = 0;y < height;y++) finder_penalty += calculate_column_finder_penalty(matrix, y, width);
+  for (let y = 0;y < height;y++) finder_penalty += calculate_row_finder_penalty(matrix[y]);
+  for (let x = 0;x < width;x++) finder_penalty += calculate_column_finder_penalty(matrix, x, height);
 
   let dark_count = 0;
-  for (let x = 0;x < width;x++) {
-    const col = matrix[x];
-    for (let y = 0;y < height;y++) if (col[y]) dark_count++;
+  for (let y = 0;y < height;y++) {
+    const row = matrix[y];
+    for (let x = 0;x < width;x++) if (row[x]) dark_count++;
   }
   const module_count = width * height;
   const dark_percent = (dark_count * 100) / module_count;

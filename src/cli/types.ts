@@ -1,8 +1,12 @@
 export type CliOutputFormat = 'svg' | 'gif' | 'ascii' | 'term';
 
 export interface CliArgs {
+  /** True when --help/-h was requested; url is not meaningful in that case. */
+  readonly help: boolean;
   readonly url: string;
   readonly format: CliOutputFormat;
+  /** Allow overwriting an existing output file. */
+  readonly force: boolean;
   readonly outputPath?: string;
   readonly size?: number;
 }

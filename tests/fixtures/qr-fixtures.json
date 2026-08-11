@@ -4,7 +4,7 @@
       "id": "ascii-hello-bun-qr",
       "input": "Hello, Bun QR!",
       "output": "ascii",
-      "expected": { "length": 338, "sha256": "45d0dce9fca184455d9e5a25dc117cbacc559ef9efb1a0602500a6d756249c64" }
+      "expected": { "length": 338, "sha256": "a0dbf94fc04316982daf9f83221156e9c995b10b1b37f2883228f01027af3087" }
     },
     {
       "id": "ascii-url-bun",

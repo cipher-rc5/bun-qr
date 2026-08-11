@@ -192,6 +192,58 @@ export function validate_version(ver: number): Version {
   return ver as Version;
 }
 
+/**
+ * Number of bits the payload body occupies in the given mode, excluding the 4-bit mode
+ * indicator and the version-dependent character-count field.
+ *
+ * Mirrors the bit layout produced by `encode_payload`:
+ * - numeric: 10 bits per group of 3 digits, plus 4 bits for 1 leftover or 7 for 2
+ * - alphanumeric: 11 bits per pair, plus 6 for a leftover character
+ * - byte: 8 bits per UTF-8 byte
+ */
+function payload_bits(text: string, type: EncodingType, encoder: (value: string) => Uint8Array): { bits: number, length: number } {
+  if (type === 'numeric') {
+    const n = text.length;
+    const rem = n % 3;
+    return { bits: Math.floor(n / 3) * 10 + (rem === 1 ? 4 : rem === 2 ? 7 : 0), length: n };
+  }
+  if (type === 'alphanumeric') {
+    const n = text.length;
+    return { bits: Math.floor(n / 2) * 11 + (n % 2) * 6, length: n };
+  }
+  if (type === 'byte') {
+    const n = encoder(text).length;
+    return { bits: n * 8, length: n };
+  }
+  throw new Error('encode: unsupported type');
+}
+
+/**
+ * Find the smallest version whose data capacity fits the payload.
+ *
+ * Capacity is a closed-form function of version/ecc/mode/length, so this scans versions
+ * comparing bit counts directly rather than attempting a full encode per candidate and
+ * using thrown exceptions as control flow. Only a genuine capacity shortfall produces an
+ * error here; real internal faults propagate from the subsequent `encode` call.
+ */
+function select_version(
+  ecc: ErrorCorrection,
+  text: string,
+  encoding: EncodingType,
+  text_encoder: ((text: string) => Uint8Array) | undefined
+): Version {
+  const encoder = text_encoder ?? utf8_to_bytes;
+  const { bits, length } = payload_bits(text, encoding, encoder);
+
+  for (let i = 1;i <= 40;i++) {
+    const v = i as Version;
+    const needed = 4 + info.length_bits(v, encoding) + bits;
+    if (needed <= info.capacity(v, ecc).capacity) return v;
+  }
+  // Preserve the historical error surfaced when input exceeds even version 40.
+  throw new Error(`Capacity overflow: ${length} ${encoding === 'byte' ? 'bytes' : 'characters'} exceed the maximum for ecc=${ecc}`);
+}
+
 export type Output = 'raw' | 'ascii' | 'term' | 'gif' | 'svg';
 
 // Main QR code encoder (public API)
@@ -206,26 +258,13 @@ export function encode_qr(text: string, output: Output = 'raw', opts: QrOpts & S
   validate_encoding(encoding);
   if (opts.mask !== undefined) validate_mask(opts.mask as Mask);
 
-  let ver: Version | undefined;
-  let data: Uint8Array | undefined;
-  let err = new Error('Unknown error');
-
+  let ver: Version;
   if (opts.version !== undefined) {
     ver = validate_version(opts.version);
-    data = encode(ver, ecc, text, encoding, opts.text_encoder);
   } else {
-    for (let i = 1;i <= 40;i++) {
-      try {
-        const v = i as Version;
-        data = encode(v, ecc, text, encoding, opts.text_encoder);
-        ver = v;
-        break;
-      } catch (e) {
-        err = e as Error;
-      }
-    }
+    ver = select_version(ecc, text, encoding, opts.text_encoder);
   }
-  if (!ver || !data) throw err;
+  const data = encode(ver, ecc, text, encoding, opts.text_encoder);
   let res = draw_qr_best(ver, ecc, data, opts.mask as Mask);
   res.assert_drawn();
   const border = opts.border === undefined ? 2 : opts.border;

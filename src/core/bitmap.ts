@@ -122,7 +122,7 @@ export class Bitmap {
     s = s.replace(/^\n+/g, '').replace(/\n+$/g, '');
     const lines = s.split(String.fromCharCode(ch_codes.newline));
     const height = lines.length;
-    const data = new Array(height);
+    const data: DrawValue[][] = [];
     let width: number | undefined;
     for (const line of lines) {
       const row = line.split('').map((i) => {
@@ -166,10 +166,26 @@ export class Bitmap {
     return { height: this.height - y, width: this.width - x };
   }
 
+  /**
+   * Normalize a coordinate to an in-bounds `{x, y}` pair.
+   *
+   * Negative coordinates address from the far edge (Python-style): `x = -1` is the last
+   * column, `x = -width` is the first. This is relied upon by the layout code, which embeds
+   * the top-right/bottom-left finder patterns via `{ x: -finder.width, y: 0 }`.
+   *
+   * Coordinates outside `[-dimension, dimension - 1]` are rejected rather than silently
+   * wrapped, so an out-of-range index surfaces as an error instead of corrupting the bitmap.
+   */
   private xy(c: Point | number) {
     if (typeof c === 'number') c = { x: c, y: c };
     if (!Number.isSafeInteger(c.x)) throw new Error(`Bitmap: invalid x=${c.x}`);
     if (!Number.isSafeInteger(c.y)) throw new Error(`Bitmap: invalid y=${c.y}`);
+    if (c.x < -this.width || c.x >= this.width) {
+      throw new Error(`Bitmap: x=${c.x} out of range for width=${this.width}`);
+    }
+    if (c.y < -this.height || c.y >= this.height) {
+      throw new Error(`Bitmap: y=${c.y} out of range for height=${this.height}`);
+    }
     c.x = mod(c.x, this.width);
     c.y = mod(c.y, this.height);
     return c;
@@ -228,8 +244,8 @@ export class Bitmap {
   }
 
   scale(factor: number): Bitmap {
-    if (!Number.isSafeInteger(factor) || factor > 1024) {
-      throw new Error(`invalid scale factor: ${factor}`);
+    if (!Number.isSafeInteger(factor) || factor < 1 || factor > 1024) {
+      throw new Error(`invalid scale factor: ${factor}. Expected number [1..1024]`);
     }
     const { height, width } = this;
     const res = new Bitmap({ height: factor * height, width: factor * width });

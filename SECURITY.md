@@ -22,6 +22,12 @@ Please **do not** open a public GitHub issue for security vulnerabilities.
 
 Report security issues via [GitHub Private Security Advisories](https://github.com/cipher-rc5/bun-qr/security/advisories/new).
 
+If private advisories are disabled, unavailable to you, or you receive no acknowledgement
+within the window below, fall back to contacting the maintainer directly through the contact
+details listed on the [repository owner's GitHub profile](https://github.com/cipher-rc5).
+Please state that the message concerns a security vulnerability in `bun-qr`, and do not
+include exploit details in a public channel such as an issue, discussion, or pull request.
+
 Include:
 
 - A description of the vulnerability and its potential impact
