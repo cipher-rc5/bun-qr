@@ -78,12 +78,12 @@ describe('draw_template: version 1', () => {
 
   test('top-left finder pattern center is dark', () => {
     // Top-left finder center is at (3,3) in the template (0-indexed)
-    expect(tpl.data[3][3]).toBe(true);
+    expect(tpl.data[3]![3]).toBe(true);
   });
 
   test('top-left finder pattern border (separator) cell is light', () => {
     // Separator row just outside the finder, e.g. row 7, col 0
-    expect(tpl.data[7][0]).toBe(false);
+    expect(tpl.data[7]![0]).toBe(false);
   });
 
   test('all cells are defined (no undefined after draw_template)', () => {
@@ -93,7 +93,7 @@ describe('draw_template: version 1', () => {
     let undefined_count = 0;
     for (let y = 0;y < tpl.height;y++) {
       for (let x = 0;x < tpl.width;x++) {
-        if (tpl.data[y][x] !== undefined) defined_count++;
+        if (tpl.data[y]![x] !== undefined) defined_count++;
         else undefined_count++;
       }
     }
@@ -122,7 +122,7 @@ describe('zigzag: data cell coverage', () => {
     let expected = 0;
     for (let y = 0;y < tpl.height;y++) {
       for (let x = 0;x < tpl.width;x++) {
-        if (tpl.data[y][x] === undefined) expected++;
+        if (tpl.data[y]![x] === undefined) expected++;
       }
     }
     expect(visited.size).toBe(expected);
@@ -139,7 +139,7 @@ describe('zigzag: data cell coverage', () => {
     let expected = 0;
     for (let y = 0;y < tpl.height;y++) {
       for (let x = 0;x < tpl.width;x++) {
-        if (tpl.data[y][x] === undefined) expected++;
+        if (tpl.data[y]![x] === undefined) expected++;
       }
     }
     expect(visited.size).toBe(expected);

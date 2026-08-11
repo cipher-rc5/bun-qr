@@ -39,10 +39,11 @@ function calculate_column_run_penalty(matrix: readonly boolean[][], column_index
 
   let penalty = 0;
   let run_length = 1;
-  let previous_color = matrix[0][column_index];
+  // Callers pass column_height = bitmap height, so rows 0..column_height-1 all exist.
+  let previous_color = matrix[0]?.[column_index];
 
   for (let y = 1;y < column_height;y++) {
-    const current_color = matrix[y][column_index];
+    const current_color = matrix[y]?.[column_index];
     if (current_color === previous_color) {
       run_length++;
     } else {
@@ -96,11 +97,13 @@ function calculate_line_finder_penalty(line_length: number, at: (i: number) => b
 }
 
 function calculate_row_finder_penalty(row_bits: readonly boolean[]): number {
-  return calculate_line_finder_penalty(row_bits.length, (i) => row_bits[i]);
+  // `calculate_line_finder_penalty` only calls `at` for indices inside [0, length), so
+  // `?? false` is unreachable padding that matches its own out-of-symbol convention.
+  return calculate_line_finder_penalty(row_bits.length, (i) => row_bits[i] ?? false);
 }
 
 function calculate_column_finder_penalty(matrix: readonly boolean[][], column_index: number, column_height: number): number {
-  return calculate_line_finder_penalty(column_height, (y) => matrix[y][column_index]);
+  return calculate_line_finder_penalty(column_height, (y) => matrix[y]?.[column_index] ?? false);
 }
 
 export function calculate_penalty(bitmap: Bitmap): number {
@@ -110,9 +113,14 @@ export function calculate_penalty(bitmap: Bitmap): number {
 
   if (width === 0 || height === 0) return 0;
 
-  // Bitmap stores data row-major: matrix[y][x].
+  // Bitmap stores data row-major: matrix[y][x]. Every loop below is bounded by
+  // `height`/`width`, which are the bitmap's own dimensions, so each row lookup resolves;
+  // the guards are hoisted to once per row rather than once per module.
   let run_penalty = 0;
-  for (let y = 0;y < height;y++) run_penalty += calculate_row_run_penalty(matrix[y]);
+  for (let y = 0;y < height;y++) {
+    const row = matrix[y];
+    if (row !== undefined) run_penalty += calculate_row_run_penalty(row);
+  }
   for (let x = 0;x < width;x++) run_penalty += calculate_column_run_penalty(matrix, x, height);
 
   let block_penalty = 0;
@@ -121,6 +129,7 @@ export function calculate_penalty(bitmap: Bitmap): number {
   for (let y = 0;y < last_row;y++) {
     const row = matrix[y];
     const next_row = matrix[y + 1];
+    if (row === undefined || next_row === undefined) continue;
     for (let x = 0;x < last_col;x++) {
       const cell = row[x];
       if (cell === row[x + 1] && cell === next_row[x] && cell === next_row[x + 1]) {
@@ -130,12 +139,16 @@ export function calculate_penalty(bitmap: Bitmap): number {
   }
 
   let finder_penalty = 0;
-  for (let y = 0;y < height;y++) finder_penalty += calculate_row_finder_penalty(matrix[y]);
+  for (let y = 0;y < height;y++) {
+    const row = matrix[y];
+    if (row !== undefined) finder_penalty += calculate_row_finder_penalty(row);
+  }
   for (let x = 0;x < width;x++) finder_penalty += calculate_column_finder_penalty(matrix, x, height);
 
   let dark_count = 0;
   for (let y = 0;y < height;y++) {
     const row = matrix[y];
+    if (row === undefined) continue;
     for (let x = 0;x < width;x++) if (row[x]) dark_count++;
   }
   const module_count = width * height;

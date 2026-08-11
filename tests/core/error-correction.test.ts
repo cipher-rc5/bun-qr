@@ -134,7 +134,7 @@ describe('Reed-Solomon', () => {
 
     // Corrupt one byte
     const corrupted = Uint8Array.from(codeword);
-    corrupted[3] ^= 0xff;
+    corrupted[3] = (codeword[3] ?? 0) ^ 0xff;
     expect(corrupted[3]).not.toBe(codeword[3]);
 
     const repaired = rs.decode(corrupted);

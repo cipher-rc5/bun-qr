@@ -59,10 +59,13 @@ export function alphabet(chars: string): AlphabetCoder<number[], string[]> {
       }
       return digits.map((i) => {
         assert_number(i);
-        if (i < 0 || i >= chars.length) {
+        const char = chars[i];
+        // The range check is expressed via the lookup itself so the result is a plain
+        // `string`; `chars[i]` is only undefined exactly when i is outside [0, length).
+        if (char === undefined) {
           throw new Error(`Digit index outside alphabet: ${i} (alphabet: ${chars.length})`);
         }
-        return chars[i];
+        return char;
       });
     }
   };

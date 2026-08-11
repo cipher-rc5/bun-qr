@@ -218,9 +218,11 @@ const geo_qr = encode_qr(location, 'svg');
 **Not implemented.** This library encodes only.
 
 `src/decode.ts` is an unimplemented scaffold: `decode_qr()` unconditionally throws
-`QR decoder not yet implemented`. There is no image-loading helper, and the module is
-deliberately not listed in the `exports` map, so `bun-qr/decode` does not resolve. Do not
-depend on it. Decoding is tracked as roadmap item 1 in `docs/summary.md`.
+`QR decoder not yet implemented`. There is no image-loading helper, the module is
+deliberately not listed in the `exports` map, and it is excluded from the published
+package entirely — so `bun-qr/decode` does not resolve and the file is not present in an
+installed copy. It exists only in the repository, as future work. Do not depend on it.
+Decoding is tracked as roadmap item 1 in `docs/summary.md`.
 
 If you need to read QR codes today, use a dedicated decoder library.
 

@@ -21,7 +21,7 @@ function make_bitmap(rows: string[]): Bitmap {
   const bm = new Bitmap({ height, width });
   for (let y = 0;y < height;y++) {
     for (let x = 0;x < width;x++) {
-      bm.data[y][x] = data[y]![x];
+      bm.data[y]![x] = data[y]![x];
     }
   }
   return bm;

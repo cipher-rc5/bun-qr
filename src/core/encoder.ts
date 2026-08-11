@@ -34,7 +34,15 @@ class BitWriter {
   }
 
   push_bit(bit: number): void {
-    if (bit) this.bytes[this.bit_length >>> 3] |= 0x80 >>> (this.bit_length & 7);
+    // `bytes` is sized for the full capacity and `encode_payload` rejects payloads that
+    // exceed it before writing, so this index is always in range. Guarding explicitly
+    // keeps a future overflow from silently vanishing into a dropped bit.
+    const idx = this.bit_length >>> 3;
+    if (bit) {
+      const cur = this.bytes[idx];
+      if (cur === undefined) throw new Error(`BitWriter: write past capacity at bit ${this.bit_length}`);
+      this.bytes[idx] = cur | (0x80 >>> (this.bit_length & 7));
+    }
     this.bit_length++;
   }
 
@@ -107,19 +115,21 @@ export function encode_payload<TEncoding extends string, TVersion extends number
   w.push(Number(`0b${mode}`), mode.length);
   w.push(data_len, length_bits);
 
+  // `symbols` is set on both the numeric and alphanumeric branches above and `utf8` on the
+  // byte branch, so the matching variable is always defined here. Reading through a local
+  // `?? []` keeps that total without an assertion; every `t[...]` below is bounded by
+  // `n = t.length`, so `?? 0` is unreachable padding rather than a behavioural fallback.
+  const t = symbols ?? [];
+  const n = t.length;
   if (type === 'numeric') {
-    const t = symbols!;
-    const n = t.length;
-    for (let i = 0;i < n - 2;i += 3) w.push(t[i] * 100 + t[i + 1] * 10 + t[i + 2], 10);
-    if (n % 3 === 1) w.push(t[n - 1], 4);
-    else if (n % 3 === 2) w.push(t[n - 2] * 10 + t[n - 1], 7);
+    for (let i = 0;i < n - 2;i += 3) w.push((t[i] ?? 0) * 100 + (t[i + 1] ?? 0) * 10 + (t[i + 2] ?? 0), 10);
+    if (n % 3 === 1) w.push(t[n - 1] ?? 0, 4);
+    else if (n % 3 === 2) w.push((t[n - 2] ?? 0) * 10 + (t[n - 1] ?? 0), 7);
   } else if (type === 'alphanumeric') {
-    const t = symbols!;
-    const n = t.length;
-    for (let i = 0;i < n - 1;i += 2) w.push(t[i] * 45 + t[i + 1], 11);
-    if (n % 2 === 1) w.push(t[n - 1], 6);
+    for (let i = 0;i < n - 1;i += 2) w.push((t[i] ?? 0) * 45 + (t[i + 1] ?? 0), 11);
+    if (n % 2 === 1) w.push(t[n - 1] ?? 0, 6);
   } else {
-    for (const byte of utf8!) w.push(byte, 8);
+    for (const byte of utf8 ?? []) w.push(byte, 8);
   }
 
   // Terminator: up to 4 zero bits, then zero-pad to a byte boundary.
@@ -127,8 +137,8 @@ export function encode_payload<TEncoding extends string, TVersion extends number
   if (w.length % 8) w.push_zeros(8 - (w.length % 8));
 
   // Fill the remaining capacity with the alternating pad codewords 0xEC / 0x11.
-  const PAD_CODEWORDS = [0b11101100, 0b00010001];
-  for (let idx = 0;w.length < capacity;idx++) w.push(PAD_CODEWORDS[idx % 2], 8);
+  const PAD_CODEWORDS = [0b11101100, 0b00010001] as const;
+  for (let idx = 0;w.length < capacity;idx++) w.push(idx % 2 === 0 ? PAD_CODEWORDS[0] : PAD_CODEWORDS[1], 8);
 
   return interleave(ver, ecc).encode(w.to_bytes());
 }

@@ -71,13 +71,24 @@ const info = {
       kanji: [8, 10, 12],
       eci: [0, 0, 0]
     };
-    return table[type][info.size_type(ver)];
+    // size_type(ver) is floor((ver+7)/17), which is 0..2 for every valid version 1–40 and
+    // so always indexes the 3-tuple. `info` is publicly re-exported via `utils`, so an
+    // out-of-range version is rejected rather than silently yielding the wrong bit count.
+    const bits = table[type][info.size_type(ver)];
+    if (bits === undefined) throw new Error(`Invalid version=${ver}. Expected number [1..40]`);
+    return bits;
   },
   mode_bits: { numeric: '0001', alphanumeric: '0010', byte: '0100', kanji: '1000', eci: '0111' },
   capacity(ver: Version, ecc: ErrorCorrection) {
+    // `info` is re-exported via `utils`, so `ver` can arrive here unvalidated despite the
+    // branded type. The tables hold exactly 40 entries; without this check an out-of-range
+    // version silently produced NaN capacities instead of failing.
     const bytes = BYTES[ver - 1];
     const words = WORDS_PER_BLOCK[ecc][ver - 1];
     const num_blocks = ECC_BLOCKS[ecc][ver - 1];
+    if (bytes === undefined || words === undefined || num_blocks === undefined) {
+      throw new Error(`Invalid version=${ver}. Expected number [1..40]`);
+    }
     const block_len = Math.floor(bytes / num_blocks) - words;
     const short_blocks = num_blocks - (bytes % num_blocks);
     return {
@@ -282,8 +293,26 @@ export function encode_qr(text: string, output: Output = 'raw', opts: QrOpts & S
 // Default export
 export default encode_qr;
 
-// Utility exports for advanced usage
+/**
+ * Low-level building blocks for callers implementing their own encoding pipeline.
+ *
+ * @remarks
+ * **Not covered by semantic versioning.** These are internals exposed for advanced use;
+ * their shapes track the encoder's implementation and may change in any release,
+ * including a patch. The stable public API is {@link encode_qr}, {@link validate_version},
+ * {@link utf8_to_bytes}, and the `bun-qr/links` subpath. Depend on this at your own risk.
+ */
 export const utils = { best, bin, draw_template, fill_arr, info, interleave, validate_version, zigzag };
 
-// Internal exports for testing
+/**
+ * White-box hooks for this package's own test suite.
+ *
+ * @remarks
+ * **Private. Not part of the public API and not covered by semantic versioning.**
+ * The leading underscore marks it as internal; it is exported only because the tests in
+ * `tests/` import it across module boundaries. It may be renamed, reshaped, or removed
+ * without notice. Do not import this from application code.
+ *
+ * @internal
+ */
 export const _tests = { Bitmap, info, detect_type, encode, draw_qr, penalty, PATTERNS };

@@ -26,7 +26,18 @@
     ".": { "types": "./types/index.d.ts", "bun": "./src/index.ts", "default": "./src/index.ts" },
     "./links": { "types": "./types/links.d.ts", "bun": "./src/links.ts", "default": "./src/links.ts" }
   },
-  "files": ["src", "types", "README.md", "SECURITY.md", "LICENSE", "LICENSE-MIT"],
+  "files": [
+    "src",
+    "types",
+    "!src/decode.ts",
+    "!src/dom.ts",
+    "!types/decode.d.ts*",
+    "!types/dom.d.ts*",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE",
+    "LICENSE-MIT"
+  ],
   "engines": { "bun": ">=1.3.0" },
   "devDependencies": { "@types/bun": "1.3.14", "typescript": "7.0.2" },
   "peerDependencies": { "typescript": ">=5.0.0" },

@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The unimplemented `src/decode.ts` and `src/dom.ts` scaffolds are excluded from the published package via `files` negation patterns; they remain in the repository as future work but are no longer shipped to consumers, nor are their generated declarations.
+- `utils` and `_tests` in `src/index.ts` are documented as internal and explicitly outside semantic versioning (`_tests` is marked `@internal`). Both remain exported — `_tests` is imported by the test suite across module boundaries — but application code must not depend on either.
 - CLI now rejects unknown options instead of silently ignoring them.
 - CLI status and success messages moved to stderr so `stdout` stays clean for piping; a missing `<url>` now exits with code 2 (usage) rather than 0.
 - Terminal colorization is disabled automatically when the stream is not a TTY.
