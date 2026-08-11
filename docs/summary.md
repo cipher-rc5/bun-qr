@@ -10,8 +10,8 @@
 - Decoder (`src/decode.ts`): scaffolded, not implemented yet
 - DOM helpers (`src/dom.ts`): scaffolded for future browser scanning support
 - Runtime/package manager/tooling: Bun only
-- Licensing: dual `Apache-2.0 OR MIT`, inherited from the upstream `paulmillr/qr` fork
-  (see `LICENSE` and `LICENSE-MIT`)
+- Licensing: dual `MIT OR Apache-2.0`, inherited from the upstream `paulmillr/qr` fork;
+  both license files are carried over verbatim (see `LICENSE` and `LICENSE-MIT`)
 
 ## Key Capabilities
 

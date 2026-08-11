@@ -20,8 +20,8 @@ bun-qr/
 |  `- bun.lock               Bun lockfile
 |
 |- Licensing
-|  |- LICENSE                Apache-2.0 + fork attribution header
-|  `- LICENSE-MIT            MIT (upstream + fork copyright)
+|  |- LICENSE                Apache-2.0 (verbatim from upstream)
+|  `- LICENSE-MIT            MIT (verbatim from upstream)
 |
 |- CI (.github/workflows/)
 |  |- ci.yml                 Format, typecheck, build, package check, coverage, benchmark

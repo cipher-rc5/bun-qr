@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--size` / `-s` CLI flag setting SVG output dimensions in pixels, bounded to 1–4000 by `MAX_CLI_SIZE` (commit `3114a4b`).
 - `--force` / `-F` CLI flag; without it the CLI now refuses to overwrite an existing output file.
 - `--` end-of-options separator; all following arguments are treated as positional.
-- `LICENSE` (Apache-2.0) and `LICENSE-MIT`, preserving the upstream `paulmillr/qr` copyright notice, plus a `"license": "(Apache-2.0 OR MIT)"` field in `package.json`. The package previously shipped no license file at all despite the README claiming dual licensing.
+- `LICENSE` (Apache-2.0) and `LICENSE-MIT`, both carried over verbatim from upstream `paulmillr/qr` so the fork's terms and copyright notice match the original exactly, plus a `"license": "(MIT OR Apache-2.0)"` field in `package.json` matching upstream's SPDX expression. The package previously shipped no license file at all despite the README claiming dual licensing.
 - `tests/roundtrip.test.ts`: independent ISO/IEC 18004 verification of rendered symbols — format-information BCH(15,5), version BCH(18,6), function-pattern geometry, and published byte-capacity limits.
 - `tests/core/bitmap.test.ts`: coverage for all four renderers, geometry primitives, and the `MAX_QR_PIXELS` guard.
 

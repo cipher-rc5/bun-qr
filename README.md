@@ -1,6 +1,6 @@
 # bun-qr
 
-Forked from [paulmillr/qr](https://github.com/paulmillr/qr) by [paulmillr](https://github.com/paulmillr), and distributed under the same dual `Apache-2.0 OR MIT` terms.
+Forked from [paulmillr/qr](https://github.com/paulmillr/qr) by [paulmillr](https://github.com/paulmillr), and distributed under the same dual `MIT OR Apache-2.0` terms.
 
 QR code generator built using the bun runtime. Zero dependencies, strict TypeScript, with multiple output formats, CLI support, and built-in link encoding utilities. This project is a fork of paulmillr's `qr`, retargeted at the Bun runtime and toolchain, with a snake_case API, a Bun-native CLI, and link encoding helpers added.
 
@@ -311,8 +311,9 @@ Licensed under either of
 at your option.
 
 This project is a fork of [paulmillr/qr](https://github.com/paulmillr/qr), which is
-distributed under the same dual `Apache-2.0 OR MIT` terms. The upstream copyright notice
-(Copyright (c) 2023 Paul Miller) is preserved in both license files as those terms require.
+distributed under the same dual `MIT OR Apache-2.0` terms. Both license files are carried
+over verbatim from upstream, preserving the original copyright notice as those terms
+require.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for
 inclusion in this work shall be dual licensed as above, without any additional terms or
