@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { encode_bitcoin, encode_calendar_event, encode_email, encode_geo, encode_phone, encode_sms, encode_url, encode_vcard, encode_whatsapp, encode_wifi, SAFE_URL_SCHEMES, validate_url } from '../src/links';
+import { encode_bitcoin, encode_calendar_event, encode_email, encode_geo, encode_phone, encode_sms, encode_url, encode_vcard, encode_whatsapp, encode_wifi, SAFE_URL_SCHEMES, validate_url, WIFI_SECURITY_TYPES } from '../src/links';
 
 describe('SAFE_URL_SCHEMES allowlist', () => {
   // This allowlist is the security control that keeps dangerous URI schemes out of
@@ -96,6 +96,12 @@ describe('encode_phone', () => {
   test('rejects an injected scheme', () => {
     expect(() => encode_phone('javascript:alert(1)')).toThrow(/Invalid phone number/);
   });
+
+  test.each(['()', '(  )', '   ', '+', '-- --'])('rejects digitless input %p instead of emitting a bare tel:', (input) => {
+    // These pass the character allowlist but strip down to nothing, which used to
+    // produce "tel:" with no number at all.
+    expect(() => encode_phone(input)).toThrow(/Invalid phone number/);
+  });
 });
 
 describe('encode_sms', () => {
@@ -176,6 +182,58 @@ describe('encode_vcard', () => {
   test('emits a minimal card when no fields are supplied', () => {
     expect(encode_vcard({})).toBe('BEGIN:VCARD\r\nVERSION:4.0\r\nEND:VCARD');
   });
+
+  describe('property injection guards', () => {
+    test('escapes the url so a CRLF cannot inject a property line', () => {
+      const out = encode_vcard({ first_name: 'A', last_name: 'B', url: 'https://x/\r\nX-EVIL:1' });
+      expect(out).toContain('URL;TYPE=work:https://x/\\nX-EVIL:1');
+      // No real property line was created.
+      expect(out).not.toContain('\r\nX-EVIL:1');
+      expect(out.split('\r\n').some((line) => line.startsWith('X-EVIL'))).toBe(false);
+    });
+
+    test('escapes a bare CR so it cannot terminate a property line', () => {
+      const out = encode_vcard({ first_name: 'A', last_name: 'B', organization: 'Acme\rTEL:911' });
+      expect(out).toContain('ORG:Acme\\nTEL:911');
+      expect(out).not.toContain('\r' + 'TEL:911');
+    });
+
+    test('escapes CRLF as a single \\n rather than doubling it', () => {
+      const out = encode_vcard({ organization: 'Acme\r\nTEL:911' });
+      expect(out).toContain('ORG:Acme\\nTEL:911');
+      expect(out).not.toContain('ORG:Acme\\n\\nTEL:911');
+      // The only CRLFs left are the real line separators.
+      expect(out).toBe('BEGIN:VCARD\r\nVERSION:4.0\r\nORG:Acme\\nTEL:911\r\nEND:VCARD');
+    });
+
+    test.each([['CRLF', '\r\n'], ['bare CR', '\r'], ['bare LF', '\n']])('escapes a %s in a note', (_label, sep) => {
+      const out = encode_vcard({ note: `a${sep}b` });
+      expect(out).toContain('NOTE:a\\nb');
+      expect(out.split('\r\n').filter(Boolean).length).toBe(4);
+    });
+
+    test('escapes line breaks in every free-text field', () => {
+      const out = encode_vcard({
+        first_name: 'A\r\nX-F:1',
+        last_name: 'B\r\nX-L:1',
+        organization: 'O\r\nX-O:1',
+        title: 'T\r\nX-T:1',
+        url: 'https://u/\r\nX-U:1',
+        note: 'N\r\nX-N:1',
+        address: { street: 'S\r\nX-S:1', city: 'C\r\nX-C:1', state: 'ST\r\nX-ST:1', zip: 'Z\r\nX-Z:1', country: 'CO\r\nX-CO:1' }
+      });
+      // Every line is a known vCard property; nothing injected.
+      for (const line of out.split('\r\n')) {
+        expect(line).toMatch(/^(BEGIN|VERSION|N|FN|ORG|TITLE|URL|ADR|NOTE|END)[;:]/);
+      }
+    });
+
+    test('leaves the phone and email fields injection-proof', () => {
+      // TEL is stripped to digits and a leading plus; EMAIL is regex-validated.
+      expect(encode_vcard({ phone: '+1-555\r\nX-EVIL:1' })).toContain('TEL;TYPE=voice:+1555');
+      expect(() => encode_vcard({ email: 'a@b.com\r\nX-EVIL:1' })).toThrow(/Invalid email in vCard/);
+    });
+  });
 });
 
 describe('encode_wifi', () => {
@@ -199,6 +257,28 @@ describe('encode_wifi', () => {
 
   test('requires an ssid', () => {
     expect(() => encode_wifi({ ssid: '' })).toThrow('WiFi SSID is required');
+  });
+
+  describe('security type allowlist', () => {
+    // `security` is interpolated into the T: field verbatim, and the TS union is erased
+    // at runtime, so an unvalidated value could forge the rest of the payload.
+    test('rejects a value that forges a second SSID field', () => {
+      expect(() => encode_wifi({ ssid: 's', password: 'p', security: 'WPA;S:Evil' as never })).toThrow(
+        'Invalid security=WPA;S:Evil. Expected one of WPA, WEP, nopass'
+      );
+    });
+
+    test.each(['wpa', 'WPA2', '', 'nopass;H:true', 'WEP;;'])('rejects security %p', (security) => {
+      expect(() => encode_wifi({ ssid: 's', security: security as never })).toThrow(/Invalid security=/);
+    });
+
+    test.each(['WPA', 'WEP', 'nopass'] as const)('accepts security %p', (security) => {
+      expect(encode_wifi({ ssid: 's', password: 'p', security })).toBe(`WIFI:T:${security};S:s;P:p;;`);
+    });
+
+    test('exports the allowlist', () => {
+      expect([...WIFI_SECURITY_TYPES]).toEqual(['WPA', 'WEP', 'nopass']);
+    });
   });
 
   describe('control-character guards', () => {
@@ -246,6 +326,41 @@ describe('encode_geo', () => {
 
   test.each([181, -181])('rejects longitude %p', (longitude) => {
     expect(() => encode_geo({ latitude: 0, longitude })).toThrow(/Invalid longitude/);
+  });
+
+  describe('non-finite guards', () => {
+    // A bare `< || >` range check lets NaN through (it fails both comparisons) and lets
+    // one side of Infinity through, so these used to reach the payload verbatim.
+    test.each([NaN, Infinity, -Infinity])('rejects latitude %p', (latitude) => {
+      expect(() => encode_geo({ latitude, longitude: 0 })).toThrow(/Invalid latitude/);
+    });
+
+    test.each([NaN, Infinity, -Infinity])('rejects longitude %p', (longitude) => {
+      expect(() => encode_geo({ latitude: 0, longitude })).toThrow(/Invalid longitude/);
+    });
+
+    test('rejects NaN coordinates rather than emitting geo:NaN,NaN', () => {
+      expect(() => encode_geo({ latitude: NaN, longitude: NaN })).toThrow(
+        'Invalid latitude: NaN. Must be a finite number between -90 and 90'
+      );
+    });
+
+    test.each([NaN, Infinity, -Infinity])('rejects altitude %p', (altitude) => {
+      expect(() => encode_geo({ latitude: 1, longitude: 2, altitude })).toThrow(/Invalid altitude/);
+    });
+
+    test.each([NaN, Infinity, -1])('rejects uncertainty %p', (uncertainty) => {
+      expect(() => encode_geo({ latitude: 1, longitude: 2, uncertainty })).toThrow(/Invalid uncertainty/);
+    });
+
+    test('still accepts a zero and a negative altitude', () => {
+      expect(encode_geo({ latitude: 1, longitude: 2, altitude: 0 })).toBe('geo:1,2,0');
+      expect(encode_geo({ latitude: 1, longitude: 2, altitude: -50 })).toBe('geo:1,2,-50');
+    });
+
+    test('still accepts a zero uncertainty', () => {
+      expect(encode_geo({ latitude: 1, longitude: 2, uncertainty: 0 })).toBe('geo:1,2?u=0');
+    });
   });
 });
 
@@ -298,6 +413,32 @@ describe('encode_calendar_event', () => {
     const out = encode_calendar_event({ title: 'Sync', start: new Date('2024-02-01T14:00:00Z') });
     expect(out).not.toContain('DTEND');
   });
+
+  describe('invalid date guards', () => {
+    // A bad Date used to leak a raw RangeError from toISOString on the timed branch and
+    // silently emit an empty DTSTART on the all-day branch. Both now fail identically.
+    test('rejects an invalid start with a named error', () => {
+      expect(() => encode_calendar_event({ title: 'x', start: new Date('nope') })).toThrow(
+        'Invalid calendar event start: Invalid Date. Expected a valid Date'
+      );
+    });
+
+    test('rejects an invalid end with a named error', () => {
+      expect(() => encode_calendar_event({ title: 'x', start: new Date('2024-02-01T14:00:00Z'), end: new Date('nope') })).toThrow(
+        'Invalid calendar event end: Invalid Date. Expected a valid Date'
+      );
+    });
+
+    test.each([false, true])('fails the same way with all_day=%p', (all_day) => {
+      expect(() => encode_calendar_event({ title: 'x', start: new Date('nope'), all_day })).toThrow(
+        'Invalid calendar event start: Invalid Date. Expected a valid Date'
+      );
+    });
+
+    test('never emits an empty DTSTART', () => {
+      expect(() => encode_calendar_event({ title: 'x', start: new Date('nope'), all_day: true })).toThrow(/Invalid calendar event start/);
+    });
+  });
 });
 
 describe('encode_whatsapp', () => {
@@ -319,6 +460,10 @@ describe('encode_whatsapp', () => {
 
   test('omits the text parameter when the message is empty', () => {
     expect(encode_whatsapp('+15551234567', '')).toBe('https://wa.me/15551234567');
+  });
+
+  test.each(['  ', '()', '+'])('rejects digitless input %p instead of emitting a bare wa.me link', (input) => {
+    expect(() => encode_whatsapp(input)).toThrow(/Invalid phone number/);
   });
 });
 
@@ -345,6 +490,48 @@ describe('encode_bitcoin', () => {
 
   test('requires an address', () => {
     expect(() => encode_bitcoin('')).toThrow('Bitcoin address is required');
+  });
+
+  describe('address validation', () => {
+    test('rejects an address carrying its own query string', () => {
+      // BIP-21 parsers split on the first `?`, so the smuggled amount would have won.
+      expect(() => encode_bitcoin('addr?amount=999&x=1', { amount: 0.1 })).toThrow(
+        "Invalid Bitcoin address: addr?amount=999&x=1. Expected only alphanumeric characters, ':', or '-'"
+      );
+    });
+
+    test.each(['addr?amount=999', 'addr&amount=999', 'addr#frag', 'a b', 'addr\r\nX', 'addr/../x', 'addr%3F'])('rejects %p', (input) => {
+      expect(() => encode_bitcoin(input)).toThrow(/Invalid Bitcoin address/);
+    });
+
+    test.each(['   ', '\t', '\n'])('rejects whitespace-only address %p', (input) => {
+      expect(() => encode_bitcoin(input)).toThrow('Bitcoin address is required');
+    });
+
+    test('trims surrounding whitespace', () => {
+      expect(encode_bitcoin(`  ${address}  `)).toBe(`bitcoin:${address}`);
+    });
+
+    test('accepts a bech32 address', () => {
+      const bech32 = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+      expect(encode_bitcoin(bech32)).toBe(`bitcoin:${bech32}`);
+    });
+
+    test('preserves a literal colon in the address prefix', () => {
+      expect(encode_bitcoin('bitcoin:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa')).toBe('bitcoin:bitcoin:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
+    });
+  });
+
+  describe('amount validation', () => {
+    test.each([NaN, Infinity, -Infinity, -1, -0.0001])('rejects amount %p', (amount) => {
+      expect(() => encode_bitcoin(address, { amount })).toThrow(/Invalid Bitcoin amount/);
+    });
+
+    test('names the field and expectation', () => {
+      expect(() => encode_bitcoin(address, { amount: NaN })).toThrow(
+        'Invalid Bitcoin amount: NaN. Must be a finite non-negative number of BTC'
+      );
+    });
   });
 });
 

@@ -1,0 +1,48 @@
+name: Feature request
+description: Suggest a capability or improvement for bun-qr
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion.
+
+        Note that **bun-qr has zero runtime dependencies as a deliberate design constraint**. Proposals that
+        would require adding one are unlikely to be accepted, so please raise those here for discussion before
+        writing any code.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case rather than a specific implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API
+      description: If you have a concrete shape in mind, sketch how it would be called.
+      render: typescript
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Can this already be done by composing the existing API?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This does not require adding a runtime dependency.
+          required: false
+        - label: I am willing to open a pull request for this.
+          required: false

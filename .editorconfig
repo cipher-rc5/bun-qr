@@ -1,0 +1,48 @@
+# Mirrors dprint.json so editors and the formatter cannot disagree.
+# dprint is the source of truth; if these drift, fix this file to match it.
+root = true
+
+[*]
+charset = utf-8
+# dprint: "newLineKind": "lf" (all languages)
+end_of_line = lf
+# dprint: "useTabs": false, "indentWidth": 2
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# dprint typescript: "lineWidth": 140
+[*.{ts,tsx,js,jsx,mts,cts}]
+max_line_length = 140
+
+# dprint json: "lineWidth": 120
+[*.{json,jsonc}]
+max_line_length = 120
+
+# dprint markdown: "lineWidth": 120, "textWrap": "maintain".
+# Trailing whitespace is significant in Markdown (two spaces = hard line break),
+# so it is preserved here rather than stripped.
+[*.md]
+max_line_length = 120
+trim_trailing_whitespace = false
+
+# dprint toml: "lineWidth": 120, "indentWidth": 2
+[*.toml]
+max_line_length = 120
+
+# Formatted by the dprint pretty_yaml plugin.
+[*.{yml,yaml}]
+indent_size = 2
+
+# Single-value pin files; a stray blank line or CRLF would break the
+# .bun-version check in ci.yml.
+[.bun-version]
+insert_final_newline = true
+
+[Makefile]
+indent_style = tab
+
+[justfile]
+indent_style = space
+indent_size = 4

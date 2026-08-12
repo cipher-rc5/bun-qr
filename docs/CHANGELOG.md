@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — unreleased
+
+Prepared as the first published release; not yet tagged or published to npm. Version
+`0.1.0` was never tagged or published either, so there are no existing consumers and the
+changes below break no released API.
+
+This is a `0.x` release: under semantic versioning the public API may still change in any
+minor release. The decoder (`src/decode.ts`) remains unimplemented, and the encoder is
+verified structurally against ISO/IEC 18004 rather than by a full data-region round-trip.
+
+**Security fixes**
+
+- `encode_wifi` now validates `security` at runtime against `WPA`/`WEP`/`nopass`. It was
+  previously interpolated into the payload unescaped and unchecked — the TypeScript union
+  is erased at runtime — so a value such as `'WPA;S:Evil'` injected a second `S:` field and
+  could forge the network a scanning device joins.
+- `encode_vcard` now escapes the `URL` field, which alone among the text properties bypassed
+  `escape_vcard`, allowing `\r\n` in a website value to inject arbitrary vCard properties
+  (for example a `TEL:` the author never entered).
+- `escape_vcard` now escapes bare `\r` as well as `\n`, per RFC 6350 §3.2. Escaping only
+  `\n` left a real carriage return in the output, so CRLF injection survived escaping in
+  every vCard and VEVENT field.
+- `encode_bitcoin` now validates and percent-encodes the address and rejects non-finite or
+  negative amounts. An address containing `?` previously let an attacker-supplied
+  `amount=` win under BIP-21 first-`?` parsing, showing the payer the wrong sum.
+- `encode_geo` now uses `Number.isFinite` guards on all four numeric fields; `NaN` passed
+  the previous `<`/`>` range checks and produced `geo:NaN,NaN`.
+- `encode_qr` now validates that a custom `text_encoder` returns a `Uint8Array`. Returning
+  anything else silently produced a well-formed, scannable QR code containing NUL bytes
+  instead of the payload.
+- An unrecognised error-correction level no longer aliases silently to `medium`.
+- `border` is now bounded. It was previously unchecked in both directions: a negative value
+  surfaced a raw `RangeError` from array allocation, and a large one allocated without limit
+  on the `raw`, `ascii`, `term`, and `svg` paths, which the `MAX_QR_PIXELS` guard never covered.
+
+**Behavioural changes to be aware of**
+
+- CLI exit codes changed: a missing `<url>` argument now exits `2` (usage) instead of `0`,
+  so scripts can detect it. `--help` still exits `0`.
+- Mask selection changed for some payloads, following the ISO/IEC 18004 §6.8.2.2 rule-3
+  fix. Output remains spec-valid, but symbols encoded by this release may differ
+  bit-for-bit from those produced by the untagged `0.1.0` tree.
+- The CLI writes the artifact to stdout and status messages to stderr; colorization is
+  disabled when stdout is not a TTY.
+- `--output` refuses to overwrite an existing file without `--force`/`-F`.
+- Unknown CLI options are rejected rather than silently ignored.
+
 ### Added
 
 - Bun-native CLI entrypoint with URL input and output selection (`svg`, `gif`, `ascii`, `term`).
@@ -15,10 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixture-based regression coverage in `tests/fixtures/qr-fixtures.json` with SHA-256 + length checks.
 - Benchmark suite in `tests/benchmark.ts` (`bun run bench`).
 - GitHub Actions CI workflow (`.github/workflows/ci.yml`) with format check, typecheck, test coverage, and benchmark artifact upload.
-- GitHub Actions release workflow (`.github/workflows/release.yml`) triggered on `v*` tags; publishes to npm with provenance.
+- GitHub Actions release workflow (`.github/workflows/release.yml`) triggered on `v*` tags; publishes to npm with
+  provenance attestation. The publish step is the one place this project shells out to npm's CLI instead of Bun's:
+  `bun publish` has no `--provenance` flag as of Bun 1.3.14 and silently ignores unknown flags, so using it would
+  produce a green release with no attestation. Revert to `bun publish --provenance` once Bun supports it.
 - `justfile` with recipes: `default` (typecheck + test), `ci`, `typecheck`, `test`, `coverage`, `bench`, `fmt`, `fmt-check`, `build`, `verify-package`, `clean`.
 - `SECURITY.md` describing responsible disclosure via GitHub Private Security Advisory.
-- `tsconfig.build.json` for library distribution builds (`NodeNext`, declarations, `dist/` output).
+- `tsconfig.build.json` for declaration-only emit (inherits `bundler` module resolution, `types/` output).
 - `src/core/tables.ts`: extracted `BYTES`, `WORDS_PER_BLOCK`, `ECC_BLOCKS` lookup tables.
 - `src/core/utils.ts`: extracted `bin`, `fill_arr`, `best`, `alphabet` utilities.
 - Branded `Version` type (`number & { readonly __brand: 'QrVersion' }`) to prevent unchecked version integers at compile time.
@@ -81,9 +131,10 @@ implementation as it stands on `main`.
 - Strict TypeScript configuration.
 
 <!--
-  No comparison/release links yet: the repository has no git tags, so
-  `compare/v0.1.0...HEAD` and `releases/tag/v0.1.0` would both 404. Add them
-  once the first `v*` tag is pushed and the release workflow has run.
+  No release links are defined yet. This repository has no tags: `0.1.0` was
+  never tagged or published, and `0.2.0` is prepared but not yet released, so
+  every `compare/` and `releases/tag/` URL would 404. Add the links here as
+  part of the commit that cuts the first tag.
 -->
 
 [Unreleased]: https://github.com/cipher-rc5/bun-qr/commits/main

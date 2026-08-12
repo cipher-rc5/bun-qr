@@ -14,7 +14,9 @@ Security issues relevant to this library include:
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | ✅        |
+| 0.2.x   | ✅        |
+
+While the package is pre-1.0, only the latest minor version receives security fixes.
 
 ## Reporting a Vulnerability
 

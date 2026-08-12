@@ -39,6 +39,9 @@ export interface VCardOptions {
   note?: string;
 }
 
+/** The only security types the WIFI: payload format defines. Enforced at runtime — the TS union is erased. */
+export const WIFI_SECURITY_TYPES: readonly ['WPA', 'WEP', 'nopass'] = ['WPA', 'WEP', 'nopass'];
+
 export interface WifiOptions {
   ssid: string;
   password?: string;
@@ -88,7 +91,9 @@ function validate_email(email: string): boolean {
 function validate_phone(phone: string): boolean {
   // Allow digits, spaces, hyphens, parentheses, and plus sign
   const phone_regex = /^[\d\s\-\+\(\)]+$/;
-  return phone_regex.test(phone);
+  // Punctuation-only input (e.g. "()" or "  ") passes the character class but strips
+  // down to nothing, so require at least one digit as well.
+  return phone_regex.test(phone) && /\d/.test(phone);
 }
 
 /** Returns true if `str` contains ASCII control characters (null, tab, newline, etc.) */
@@ -97,7 +102,17 @@ function has_control_chars(str: string): boolean {
 }
 
 function escape_vcard(text: string): string {
-  return text.replace(/[,;\\]/g, '\\$&').replace(/\n/g, '\\n');
+  // RFC 6350 §3.2: every line break in a property value is escaped as "\n", regardless
+  // of whether the source used CRLF, a bare CR, or a bare LF. CRLF must be collapsed
+  // first so it does not become a doubled escape.
+  return text.replace(/[,;\\]/g, '\\$&').replace(/\r\n/g, '\\n').replace(/[\r\n]/g, '\\n');
+}
+
+/** Throws if `date` is not a valid Date, naming `field` so the caller knows which input failed. */
+function assert_valid_date(date: Date, field: string): void {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    throw new Error(`Invalid ${field}: ${String(date)}. Expected a valid Date`);
+  }
 }
 
 function format_iso_date(date: Date): string {
@@ -277,7 +292,9 @@ export function encode_vcard(opts: VCardOptions): string {
     lines.push(`EMAIL;TYPE=work:${opts.email}`);
   }
   if (opts.url) {
-    lines.push(`URL;TYPE=work:${opts.url}`);
+    // Must be escaped like every other free-text field: an unescaped CRLF here would
+    // terminate the URL property and inject an arbitrary vCard property line.
+    lines.push(`URL;TYPE=work:${escape_vcard(opts.url)}`);
   }
 
   // Address — RFC 6350: PO Box;Extended;Street;City;State;Postal;Country
@@ -332,6 +349,12 @@ export function encode_wifi(opts: WifiOptions): string {
   if (password && has_control_chars(password)) {
     throw new Error('WiFi password contains invalid control characters (null bytes, tabs, newlines, etc.)');
   }
+  // The `security` value is interpolated as the `T:` field verbatim, so an unvalidated
+  // string could close the field and forge the rest of the payload (e.g. a different
+  // SSID). Only three values are legal, so allowlist them rather than escaping.
+  if (!(WIFI_SECURITY_TYPES as readonly string[]).includes(security)) {
+    throw new Error(`Invalid security=${security}. Expected one of ${WIFI_SECURITY_TYPES.join(', ')}`);
+  }
 
   // Escape special characters in SSID and password
   const escape_wifi = (str: string) => str.replace(/[\\";,:]/g, '\\$&');
@@ -357,21 +380,29 @@ export function encode_wifi(opts: WifiOptions): string {
 export function encode_geo(opts: GeoOptions): string {
   const { latitude, longitude, altitude, uncertainty } = opts;
 
-  if (latitude < -90 || latitude > 90) {
-    throw new Error(`Invalid latitude: ${latitude}. Must be between -90 and 90`);
+  // Number.isFinite first: NaN fails both range comparisons, and Infinity only fails one
+  // side, so a bare `<`/`>` pair would let both through into the payload.
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+    throw new Error(`Invalid latitude: ${latitude}. Must be a finite number between -90 and 90`);
   }
-  if (longitude < -180 || longitude > 180) {
-    throw new Error(`Invalid longitude: ${longitude}. Must be between -180 and 180`);
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    throw new Error(`Invalid longitude: ${longitude}. Must be a finite number between -180 and 180`);
   }
 
   let result = `geo:${latitude},${longitude}`;
 
   if (altitude !== undefined) {
+    if (!Number.isFinite(altitude)) {
+      throw new Error(`Invalid altitude: ${altitude}. Must be a finite number in meters`);
+    }
     result += `,${altitude}`;
   }
 
   const params: string[] = [];
   if (uncertainty !== undefined) {
+    if (!Number.isFinite(uncertainty) || uncertainty < 0) {
+      throw new Error(`Invalid uncertainty: ${uncertainty}. Must be a finite non-negative number in meters`);
+    }
     params.push(`u=${uncertainty}`);
   }
 
@@ -398,6 +429,13 @@ export function encode_geo(opts: GeoOptions): string {
  */
 export function encode_calendar_event(opts: CalendarEventOptions): string {
   const { title, start, end, location, description, all_day = false } = opts;
+
+  // Validate up front so both branches fail the same way instead of one throwing a raw
+  // RangeError from toISOString and the other silently emitting an empty DTSTART.
+  assert_valid_date(start, 'calendar event start');
+  if (end) {
+    assert_valid_date(end, 'calendar event end');
+  }
 
   const lines: string[] = ['BEGIN:VEVENT', `SUMMARY:${escape_vcard(title)}`];
 
@@ -467,14 +505,27 @@ export function encode_whatsapp(phone: string, message?: string): string {
  * ```
  */
 export function encode_bitcoin(address: string, opts: { amount?: number, label?: string, message?: string } = {}): string {
-  if (!address) {
+  const cleaned = address.trim();
+
+  if (!cleaned) {
     throw new Error('Bitcoin address is required');
   }
+  // BIP-21 parsers split on the first `?`, so any query/fragment/whitespace character
+  // smuggled into the address would let it declare its own amount and win over ours.
+  // Base58, Bech32, and BIP-21 address prefixes are all alphanumeric plus ':' and '-'.
+  if (!/^[A-Za-z0-9:\-]+$/.test(cleaned)) {
+    throw new Error(`Invalid Bitcoin address: ${address}. Expected only alphanumeric characters, ':', or '-'`);
+  }
 
-  let result = `bitcoin:${address}`;
+  // Percent-encode for defence in depth. The charset above is already URI-safe apart
+  // from ':', which BIP-21 allows literally in the address prefix, so restore it.
+  let result = `bitcoin:${encodeURIComponent(cleaned).replace(/%3A/g, ':')}`;
   const params: string[] = [];
 
   if (opts.amount !== undefined) {
+    if (!Number.isFinite(opts.amount) || opts.amount < 0) {
+      throw new Error(`Invalid Bitcoin amount: ${opts.amount}. Must be a finite non-negative number of BTC`);
+    }
     params.push(`amount=${opts.amount}`);
   }
   if (opts.label) {

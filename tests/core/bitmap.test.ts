@@ -37,6 +37,34 @@ describe('construction', () => {
     expect(() => new Bitmap({ width: 1.5, height: 2 })).toThrow(/invalid width/);
     expect(() => new Bitmap({ width: 2, height: 1.5 })).toThrow(/invalid height/);
   });
+
+  test('non-positive dimensions are rejected', () => {
+    // Regression: only `Number.isSafeInteger` was checked, so `new Bitmap(-5)` built a
+    // degenerate object reporting width=-5 and height=-5 with zero data rows, whose
+    // to_string() was '' — a silent wrong answer instead of an error.
+    expect(() => new Bitmap(-5)).toThrow(/invalid height=-5/);
+    expect(() => new Bitmap(0)).toThrow(/invalid height=0/);
+    expect(() => new Bitmap({ width: 0, height: 2 })).toThrow(/invalid width=0/);
+    expect(() => new Bitmap({ width: 2, height: -1 })).toThrow(/invalid height=-1/);
+  });
+
+  test('the dimension error names the valid range', () => {
+    expect(() => new Bitmap(-5)).toThrow(new RegExp(`\\[1\\.\\.${MAX_QR_PIXELS}\\]`));
+  });
+
+  test('dimensions whose area exceeds MAX_QR_PIXELS are rejected before allocating', () => {
+    // Regression: a large single dimension used to allocate unboundedly — this case ran
+    // past 120s before the guard existed. It must now fail fast.
+    expect(() => new Bitmap({ height: 1e9, width: 2 })).toThrow(/exceeds the maximum/);
+    expect(() => new Bitmap(4001)).toThrow(/16008001 modules/);
+  });
+
+  test('an area exactly at MAX_QR_PIXELS is accepted', () => {
+    // 4000x4000 == MAX_QR_PIXELS and the guard uses `>`, so the boundary must pass.
+    const b = new Bitmap(4000);
+    expect(b.width).toBe(4000);
+    expect(b.height).toBe(4000);
+  });
 });
 
 describe('from_string', () => {
@@ -185,6 +213,31 @@ describe('border, embed, slice, clone, inverse', () => {
     const b = Bitmap.from_string('XX\nXX').border(0, false);
     expect(b.width).toBe(2);
     expect(b.height).toBe(2);
+  });
+
+  test('border rejects negative and non-integer widths', () => {
+    // Regression: a negative border reached `new Array(-1)` inside fill_arr and surfaced
+    // as a bare RangeError with no indication of which argument was at fault.
+    const b = Bitmap.from_string('XX\nXX');
+    expect(() => b.border(-1, false)).toThrow(/invalid border: -1/);
+    expect(() => b.border(1.5, false)).toThrow(/invalid border: 1.5/);
+    expect(() => b.border(NaN, false)).toThrow(/invalid border/);
+  });
+
+  test('border rejects a width whose resulting area exceeds MAX_QR_PIXELS', () => {
+    // Regression: `border()` had no bound at all, and MAX_QR_PIXELS guarded only
+    // to_gif/to_image — so the raw, ascii, term, and svg paths could allocate far past
+    // the limit (border 6000 produced >144M modules, ~9x the cap). The check lives in
+    // border() itself so every output path and every direct Bitmap user is covered.
+    const b = Bitmap.from_string('XX\nXX');
+    expect(() => b.border(20000, false)).toThrow(/exceeds the maximum/);
+    expect(() => b.border(6000, false)).toThrow(/144048004 modules/);
+  });
+
+  test('border allows a large-but-legal quiet zone', () => {
+    const b = Bitmap.from_string('XX\nXX').border(100, false);
+    expect(b.width).toBe(202);
+    expect(b.height).toBe(202);
   });
 
   test('border does not alias the source rows', () => {
@@ -395,6 +448,38 @@ describe('to_gif', () => {
     const out = gif(new Bitmap(1).rect(0, Infinity, true));
     expect(out[6]! | (out[7]! << 8)).toBe(1);
     expect(out[out.length - 1]).toBe(0x3b);
+  });
+
+  test('resets the LZW dictionary when the 4096-code table fills', () => {
+    // The table-full branch only runs once next_code reaches MAX_CODE, which needs a
+    // large, high-entropy image; small fixtures never reach it. This bitmap drives the
+    // dictionary past 4096 codes several times over, so the reset path is exercised and
+    // the resulting stream must still be structurally valid.
+    const b = new Bitmap(1200).rect(0, Infinity, ({ x, y }) => ((x * 2654435761 ^ y * 40503) >>> 7) % 2 === 0);
+    const out = b.to_gif();
+
+    expect(out[6]! | (out[7]! << 8)).toBe(1200);
+    expect(out[8]! | (out[9]! << 8)).toBe(1200);
+    expect(out[out.length - 1]).toBe(0x3b);
+
+    // Walk the sub-block chain to confirm the stream is well-formed end to end: a
+    // mishandled reset would desynchronise the bit packing and corrupt the lengths.
+    const sep = out.indexOf(0x2c);
+    expect(out[sep + 10]).toBe(0x02); // minimum LZW code size
+    let i = sep + 11;
+    let blocks = 0;
+    while (out[i] !== 0x00) {
+      const len = out[i]!;
+      expect(len).toBeGreaterThan(0);
+      expect(len).toBeLessThanOrEqual(255);
+      i += len + 1;
+      blocks++;
+      expect(blocks).toBeLessThan(100000); // loop guard
+    }
+    // >4096 codes worth of data means many maximum-size sub-blocks.
+    expect(blocks).toBeGreaterThan(100);
+    expect(out[i]).toBe(0x00); // block terminator
+    expect(out[i + 1]).toBe(0x3b); // trailer immediately after
   });
 });
 

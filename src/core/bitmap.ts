@@ -125,6 +125,33 @@ export class Bitmap {
     return size;
   }
 
+  /**
+   * Validate the dimensions a bitmap is about to be allocated at.
+   *
+   * `Bitmap.size` runs on every `rect`/`rect_slice` call — where `Infinity` is a legal
+   * "to the edge" sentinel and the region is subsequently clamped — so it cannot reject
+   * non-finite or oversized input. This check runs only where memory is actually
+   * committed (the constructor), and enforces two things `Bitmap.size` deliberately does
+   * not: dimensions must be strictly positive, and the total area must stay within
+   * MAX_QR_PIXELS. Without the first, `new Bitmap(-5)` yields a degenerate object that
+   * reports width=-5 with zero data rows; without the second, a large height stalls the
+   * process in an unbounded allocation before any output method can apply its own guard.
+   */
+  private static assert_allocatable(height: number, width: number): void {
+    if (!Number.isSafeInteger(height) || height < 1) {
+      throw new Error(`Bitmap: invalid height=${height}. Expected integer [1..${MAX_QR_PIXELS}]`);
+    }
+    if (!Number.isSafeInteger(width) || width < 1) {
+      throw new Error(`Bitmap: invalid width=${width}. Expected integer [1..${MAX_QR_PIXELS}]`);
+    }
+    const area = height * width;
+    if (area > MAX_QR_PIXELS) {
+      throw new Error(
+        `Bitmap: ${width}×${height} = ${area} modules exceeds the maximum of ${MAX_QR_PIXELS}. Reduce scale, border, or version.`
+      );
+    }
+  }
+
   static from_string(s: string): Bitmap {
     s = s.replace(/^\n+/g, '').replace(/\n+$/g, '');
     const lines = s.split(String.fromCharCode(ch_codes.newline));
@@ -154,6 +181,7 @@ export class Bitmap {
 
   constructor (size: Size | number, data?: DrawValue[][]) {
     const { height, width } = Bitmap.size(size);
+    Bitmap.assert_allocatable(height, width);
     this.data = data || Array.from({ length: height }, () => fill_arr(width, undefined));
     this.height = height;
     this.width = width;
@@ -249,9 +277,23 @@ export class Bitmap {
     return this.rect(c, { width: 1, height: len }, value);
   }
 
+  /**
+   * Return a copy surrounded by `border` modules of `value` on every side.
+   *
+   * The bounds check happens here rather than being left to the constructor because the
+   * quiet-zone rows are materialised before the new Bitmap is built: an unchecked border
+   * commits the whole allocation inside this method. It is also the only memory guard on
+   * the `raw`, `ascii`, `term`, and `svg` paths — `MAX_QR_PIXELS` otherwise applies only
+   * in `to_gif`/`to_image` — so validating here protects every output format, and direct
+   * `Bitmap` users, regardless of what the caller checked.
+   */
   border(border = 2, value: DrawValue): Bitmap {
+    if (!Number.isSafeInteger(border) || border < 0) {
+      throw new Error(`invalid border: ${border}. Expected integer [0..${MAX_QR_PIXELS}]`);
+    }
     const height = this.height + 2 * border;
     const width = this.width + 2 * border;
+    Bitmap.assert_allocatable(height, width);
     const v = fill_arr(border, value);
     const h: DrawValue[][] = Array.from({ length: border }, () => fill_arr(width, value));
     return new Bitmap({ height, width }, [...h, ...this.data.map((i) => [...v, ...i, ...v]), ...h]);

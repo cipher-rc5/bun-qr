@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import encode_qr from '../src/index';
+import encode_qr, { utils } from '../src/index';
 import { encode_email, encode_url, encode_wifi } from '../src/links';
 
 type QrFixtureOutput = 'ascii' | 'svg' | 'gif';
@@ -85,6 +85,147 @@ describe('fixtures: link encoding', () => {
 
   test('matches WiFi fixture', () => {
     expect(encode_wifi(linkFixtures.wifi.input)).toBe(linkFixtures.wifi.expected);
+  });
+});
+
+/**
+ * Regression tests for the input-validation defects catalogued in `_dev/reviews/002`.
+ *
+ * Each block reproduces the exact call that previously either returned a silently wrong
+ * result or leaked a raw engine error, and asserts the actionable `Error` now thrown.
+ * The "valid input unchanged" tests in each block guard against over-eager validation:
+ * these fixes must not narrow the accepted surface of the public API.
+ */
+describe('validation: text_encoder return value', () => {
+  // Previously an encoder returning a string flowed into `encode_payload`, where iterating it
+  // and shifting NaN produced a valid, scannable symbol encoding NUL bytes.
+  test('rejects a non-Uint8Array return', () => {
+    expect(() => encode_qr('secret-payload', 'raw', { encoding: 'byte', text_encoder: (() => 'nope') as never })).toThrow(
+      /text_encoder must return a Uint8Array, got string/
+    );
+  });
+
+  test('rejects an array return', () => {
+    expect(() => encode_qr('x', 'raw', { encoding: 'byte', text_encoder: (() => [1, 2, 3]) as never })).toThrow(
+      /text_encoder must return a Uint8Array, got object/
+    );
+  });
+
+  test('rejects a null return', () => {
+    expect(() => encode_qr('x', 'raw', { encoding: 'byte', text_encoder: (() => null) as never })).toThrow(
+      /text_encoder must return a Uint8Array, got null/
+    );
+  });
+
+  test('is validated on the version-selection path too', () => {
+    // No explicit `version`, so `select_version` calls the encoder before `encode` does.
+    expect(() => encode_qr('secret-payload', 'raw', { encoding: 'byte', text_encoder: (() => 'nope') as never })).toThrow(/text_encoder/);
+  });
+
+  test('a conforming encoder still matches the default output', () => {
+    const custom = encode_qr('secret-payload', 'ascii', { encoding: 'byte', text_encoder: (t) => new TextEncoder().encode(t) });
+    expect(custom).toBe(encode_qr('secret-payload', 'ascii', { encoding: 'byte' }));
+  });
+});
+
+describe('validation: info.format_bits', () => {
+  // An unknown ecc key yielded `undefined << 3` === 0 — exactly `medium`'s code — so a typo
+  // silently produced a symbol readable only as medium ecc.
+  test('rejects an unknown error correction level instead of aliasing to medium', () => {
+    expect(() => utils.info.format_bits('bogus' as never, 0)).toThrow(/Invalid error correction mode=bogus/);
+    expect(utils.info.format_bits('medium', 0)).toBe(21522);
+  });
+
+  test('rejects an out-of-range mask', () => {
+    // 99 previously produced 129182 — a 17-bit value in a 15-bit spec field.
+    expect(() => utils.info.format_bits('low', 99 as never)).toThrow(/Invalid mask=99/);
+    expect(() => utils.info.format_bits('low', -1 as never)).toThrow(/Invalid mask=-1/);
+    expect(() => utils.info.format_bits('low', 1.5 as never)).toThrow(/Invalid mask=1.5/);
+  });
+
+  test('every valid ecc/mask pair still fits the 15-bit format field', () => {
+    for (const ecc of ['low', 'medium', 'quartile', 'high'] as const) {
+      for (let mask = 0;mask < 8;mask++) {
+        const bits = utils.info.format_bits(ecc, mask as never);
+        expect(bits).toBeGreaterThanOrEqual(0);
+        expect(bits).toBeLessThan(1 << 15);
+      }
+    }
+  });
+});
+
+describe('validation: info.capacity', () => {
+  test('rejects an unknown error correction level with an actionable message', () => {
+    // Previously a raw `TypeError: undefined is not an object` from indexing the ecc tables.
+    expect(() => utils.info.capacity(5 as never, 'nope' as never)).toThrow(/Invalid error correction mode=nope/);
+  });
+
+  test('rejects an out-of-range version', () => {
+    expect(() => utils.info.capacity(0 as never, 'medium')).toThrow(/Invalid version=0/);
+    expect(() => utils.info.capacity(41 as never, 'medium')).toThrow(/Invalid version=41/);
+  });
+});
+
+describe('validation: utils.draw_template', () => {
+  // `info.size.encode` is pure arithmetic, so an unvalidated version produced a structurally
+  // malformed bitmap rather than throwing: ver 0 -> 17x17, ver 41 -> 181x181, ver 2.5 -> 27x27.
+  test('rejects out-of-range and non-integer versions', () => {
+    for (const ver of [0, -1, 41, 2.5, Number.NaN]) {
+      expect(() => utils.draw_template(ver as never, 'medium', 0)).toThrow(/Invalid version=/);
+    }
+  });
+
+  test('rejects an unknown ecc level and an out-of-range mask', () => {
+    expect(() => utils.draw_template(utils.validate_version(1), 'bogus' as never, 0)).toThrow(/Invalid error correction mode=bogus/);
+    expect(() => utils.draw_template(utils.validate_version(1), 'medium', 8 as never)).toThrow(/Invalid mask=8/);
+  });
+
+  test('every valid version still yields the spec-sized template', () => {
+    for (let ver = 1;ver <= 40;ver++) {
+      const tpl = utils.draw_template(utils.validate_version(ver), 'medium', 0);
+      expect(tpl.data.length).toBe(21 + 4 * (ver - 1));
+    }
+  });
+});
+
+describe('validation: encode_qr arguments', () => {
+  test('rejects a non-string text instead of leaking a raw TypeError', () => {
+    for (const text of [12345, null, {}, undefined, [], true]) {
+      expect(() => encode_qr(text as never, 'raw')).toThrow(/Invalid text type=.*Expected string/);
+    }
+  });
+
+  test('rejects a null or non-object opts', () => {
+    expect(() => encode_qr('hi', 'ascii', null as never)).toThrow(/Invalid opts type=null/);
+    expect(() => encode_qr('hi', 'ascii', 7 as never)).toThrow(/Invalid opts type=number/);
+  });
+
+  test('an empty string is still a valid payload', () => {
+    expect(typeof encode_qr('', 'ascii')).toBe('string');
+  });
+});
+
+describe('validation: border bounds', () => {
+  test('rejects a negative border instead of leaking a RangeError from fill_arr', () => {
+    expect(() => encode_qr('hi', 'ascii', { border: -1 })).toThrow(/invalid border: -1\. Expected number \[0\.\.1024\]/);
+  });
+
+  test('rejects an absurdly large border instead of allocating a giant matrix', () => {
+    // `border: 20000` used to allocate a 40021x40021 matrix; `border: 100000` never returned.
+    for (const border of [1025, 20000, 100000]) {
+      expect(() => encode_qr('hi', 'ascii', { border })).toThrow(/invalid border/);
+    }
+  });
+
+  test('still rejects non-integer borders', () => {
+    expect(() => encode_qr('hi', 'ascii', { border: 1.5 })).toThrow(/invalid border/);
+    expect(() => encode_qr('hi', 'ascii', { border: Number.NaN })).toThrow(/invalid border/);
+  });
+
+  test('accepts the full valid range including the bounds', () => {
+    for (const border of [0, 1, 2, 4, 1024]) {
+      expect(encode_qr('hi', 'raw', { border }).length).toBe(21 + 2 * border);
+    }
   });
 });
 

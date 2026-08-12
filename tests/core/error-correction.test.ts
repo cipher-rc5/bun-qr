@@ -69,6 +69,29 @@ describe('GF(2^8): basic operations', () => {
       expect(GF.pow(2, i)).toBe(GF.exp(i));
     }
   });
+
+  test('pow(0, e) === 0 for e >= 1', () => {
+    // Regression: `log[0]` is never assigned by the table init (it only sets
+    // log[exp[i]], and exp[i] is never 0), so it kept its 0 seed and pow(0, e) read
+    // exp(0) = 1 for every exponent. In GF(2^8) the zero element raised to any positive
+    // power is 0. Not reachable from the encode path — divisor_poly only calls pow(2, i)
+    // — but reachable through the exported _tests.GF.
+    for (const e of [1, 2, 5, 254, 255]) expect(GF.pow(0, e)).toBe(0);
+  });
+
+  test('pow(0, 0) === 1 by the empty-product convention', () => {
+    expect(GF.pow(0, 0)).toBe(1);
+  });
+
+  test('pow agrees with repeated multiplication', () => {
+    for (const base of [1, 2, 3, 7, 255]) {
+      let acc = 1;
+      for (let e = 0;e < 10;e++) {
+        expect(GF.pow(base, e)).toBe(acc);
+        acc = GF.mul(acc, base);
+      }
+    }
+  });
 });
 
 describe('GF(2^8): polynomial operations', () => {

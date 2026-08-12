@@ -48,6 +48,46 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['bun.com', '--help']).help).toBe(true);
     });
 
+    test('help wins over a parse error later in the command', () => {
+      // Regression: the help early-return sat after the argv loop, so a mid-loop parse
+      // error preempted it — exactly when the user is asking how to fix their command.
+      expect(() => parseCliArgs(['--help', '--size', 'abc'])).not.toThrow();
+      expect(parseCliArgs(['--help', '--size', 'abc']).help).toBe(true);
+    });
+
+    test('help wins when it trails the offending argument', () => {
+      expect(parseCliArgs(['--size', 'abc', '--help']).help).toBe(true);
+    });
+
+    test('help wins over an unknown option', () => {
+      expect(parseCliArgs(['--bogus-flag', '--help']).help).toBe(true);
+    });
+
+    test('help wins over a missing url', () => {
+      expect(parseCliArgs(['--help']).help).toBe(true);
+    });
+
+    test('help wins over an out-of-range size', () => {
+      expect(parseCliArgs(['--help', '--size', String(MAX_CLI_SIZE + 1)]).help).toBe(true);
+    });
+
+    test('-h short form also wins over a parse error', () => {
+      expect(parseCliArgs(['-h', '--format', 'png']).help).toBe(true);
+    });
+
+    test('help after -- is positional data, not a help request', () => {
+      // The end-of-options separator must still win over the help pre-scan.
+      const result = parseCliArgs(['--', '--help']);
+      expect(result.help).toBe(false);
+      expect(result.url).toBe('--help');
+    });
+
+    test('--help in a value slot is still a missing-value error', () => {
+      // `--output --help` asks to write to a file named "--help"; that stays an error
+      // rather than silently turning into a help request.
+      expect(() => parseCliArgs(['bun.com', '--output', '--help'])).toThrow('Missing value for --output.');
+    });
+
     test('help is not routed through the exception channel', () => {
       // Regression: help used to be thrown and recovered by string equality, so the
       // help text could round-trip back in as a payload. It is now a normal return value.
@@ -117,8 +157,25 @@ describe('parseCliArgs', () => {
       expect(() => parseCliArgs(['bun.com', '--size', '0'])).toThrow('Invalid size: 0');
     });
 
-    test('rejects a negative value as an unknown option', () => {
-      expect(() => parseCliArgs(['bun.com', '--size', '-5'])).toThrow('Missing value for --size.');
+    test('rejects a negative value with an accurate message', () => {
+      // Regression: a negative number was misreported as a missing value ("Got another
+      // option instead: -5") even though the value was present. The real fault is the sign.
+      expect(() => parseCliArgs(['bun.com', '--size', '-5'])).toThrow('Invalid size: -5');
+      expect(() => parseCliArgs(['bun.com', '--size', '-5'])).not.toThrow('Got another option instead');
+    });
+
+    test('rejects a negative fraction with an accurate message', () => {
+      expect(() => parseCliArgs(['bun.com', '--size', '-2.5'])).toThrow('Invalid size: -2.5');
+    });
+
+    test('a negative value still leaves the url positional intact', () => {
+      // Regression: `--size -5 test` consumed nothing and blamed the wrong argument.
+      expect(() => parseCliArgs(['--size', '-5', 'test'])).toThrow('Invalid size: -5');
+    });
+
+    test('a real following option is still rejected as a missing value', () => {
+      // The negative-number carve-out must not weaken the flag-as-value guard.
+      expect(() => parseCliArgs(['bun.com', '--size', '--force'])).toThrow('Missing value for --size.');
     });
 
     test('accepts the maximum bound', () => {

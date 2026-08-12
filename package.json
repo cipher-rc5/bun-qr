@@ -1,6 +1,6 @@
 {
   "name": "bun-qr",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "QR code generator with link encoding utilities for Bun runtime",
   "license": "(MIT OR Apache-2.0)",
   "repository": { "type": "git", "url": "git+https://github.com/cipher-rc5/bun-qr.git" },

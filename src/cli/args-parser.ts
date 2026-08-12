@@ -4,6 +4,9 @@ const FORMATS: readonly CliOutputFormat[] = ['svg', 'gif', 'ascii', 'term'];
 
 const FLAGS: readonly string[] = ['--help', '-h', '--output', '-o', '--format', '-f', '--size', '-s', '--force', '-F'];
 
+/** Flags that consume the following argv entry as their value. */
+const VALUE_FLAGS: readonly string[] = ['--output', '-o', '--format', '-f', '--size', '-s'];
+
 /**
  * Upper bound for --size, derived from MAX_QR_PIXELS (16_000_000 = 4000x4000)
  * in src/core/bitmap.ts. A square output of 4000x4000 is exactly at the limit.
@@ -11,11 +14,17 @@ const FLAGS: readonly string[] = ['--help', '-h', '--output', '-o', '--format', 
 export const MAX_CLI_SIZE = 4000;
 
 export function parseCliArgs(argv: readonly string[]): CliArgs {
+  // --help is answered before any validation runs. Asking how to use the tool must not be
+  // preempted by an error in the very command the user is asking for help with: previously
+  // `--help --size abc` threw "Invalid size: abc" and exited 1 instead of printing help.
+  if (requestsHelp(argv)) {
+    return { help: true, url: '', format: 'svg', force: false };
+  }
+
   let outputPath: string | undefined;
   let format: CliOutputFormat = 'svg';
-  let size: number | undefined;
   let force = false;
-  let help = false;
+  let size: number | undefined;
   let endOfOptions = false;
   const positional: string[] = [];
 
@@ -33,7 +42,6 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
     }
 
     if (arg === '--help' || arg === '-h') {
-      help = true;
       continue;
     }
 
@@ -72,10 +80,6 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
     positional.push(arg);
   }
 
-  if (help) {
-    return { help: true, url: '', format, force };
-  }
-
   const url = positional[0];
   if (!url) {
     throw new MissingUrlError();
@@ -92,16 +96,50 @@ export class MissingUrlError extends Error {
   }
 }
 
+/**
+ * Scan for --help/-h ahead of validation so it always wins and exits 0.
+ *
+ * Two positions do not count as a help request: anything after the `--` end-of-options
+ * separator (that is positional data, so `-- --help` still encodes the literal "--help"),
+ * and the value slot immediately following a value-taking flag (so `--output --help`
+ * remains the existing "missing value" error rather than silently printing help).
+ */
+function requestsHelp(argv: readonly string[]): boolean {
+  for (let i = 0;i < argv.length;i++) {
+    const arg = argv[i] as string;
+
+    if (arg === '--') {
+      return false;
+    }
+    if (arg === '--help' || arg === '-h') {
+      return true;
+    }
+    if (VALUE_FLAGS.includes(arg)) {
+      i++;
+    }
+  }
+
+  return false;
+}
+
 function readFlagValue(argv: readonly string[], index: number, flag: string): string {
   const next = argv[index + 1];
   if (next === undefined || next.length === 0) {
     throw new Error(`Missing value for ${flag}.`);
   }
-  if (next.startsWith('-') && next !== '-') {
+  // A negative number is a value, not an option. Forwarding it lets the value-specific
+  // validator report the real problem ("Invalid size: -5") instead of the misleading
+  // "Got another option instead: -5", which claimed the value was absent.
+  if (next.startsWith('-') && next !== '-' && !isNegativeNumber(next)) {
     throw new Error(`Missing value for ${flag}. Got another option instead: ${next}`);
   }
 
   return next;
+}
+
+/** Matches a leading-minus decimal number, e.g. "-5" or "-2.5" — a value, not a flag. */
+function isNegativeNumber(value: string): boolean {
+  return /^-\d+(\.\d+)?$/.test(value);
 }
 
 function parseSize(value: string): number {
@@ -130,7 +168,7 @@ export function helpText(): string {
     '',
     'Options:',
     '  -f, --format <svg|gif|ascii|term>   Output format (default: svg)',
-    '  -o, --output <path>                  Output file for svg/gif formats',
+    '  -o, --output <path>                  Write output to a file (all formats)',
     `  -s, --size <pixels>                  Output size in pixels, 1-${MAX_CLI_SIZE} (svg only)`,
     '  -F, --force                          Overwrite the output file if it already exists',
     '  -h, --help                           Show help',

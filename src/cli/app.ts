@@ -41,6 +41,7 @@ export class QrCliApplication {
 
     try {
       const normalized = this.normalizer.normalize(args.url);
+      this.warnIfSizeIgnored(args);
       const output = this.generator.generate(normalized, args.format, args.size);
       await this.handleOutput(args, output);
       this.presenter.printSuccess('QR generation completed.');
@@ -51,16 +52,40 @@ export class QrCliApplication {
     }
   }
 
+  /**
+   * --size only affects the svg renderer, which is the sole format that carries explicit
+   * width/height attributes. Passing it with any other format used to be a silent no-op,
+   * so the user got an unchanged artifact with no indication why. Warn rather than fail:
+   * the request is unambiguous and the output is still correct, just not resized.
+   */
+  private warnIfSizeIgnored(args: CliArgs): void {
+    if (args.size !== undefined && args.format !== 'svg') {
+      this.presenter.printError(`Warning: --size is ignored for --format ${args.format}. It applies to svg output only.`);
+    }
+  }
+
   private async handleOutput(args: CliArgs, output: string | Uint8Array): Promise<void> {
-    if (args.format === 'ascii' || args.format === 'term') {
+    const isText = args.format === 'ascii' || args.format === 'term';
+
+    if (isText) {
       const asText = typeof output === 'string' ? output : new TextDecoder().decode(output);
-      this.presenter.printInfo(asText);
+
+      // --output used to be dropped entirely for text formats: no file appeared, yet the run
+      // still reported success. Writing the text is the least surprising reading of the flag.
+      if (args.outputPath === undefined) {
+        this.presenter.printInfo(asText);
+        return;
+      }
+
+      await this.writeArtifact(args, args.outputPath, asText);
       return;
     }
 
     const extension = args.format === 'gif' ? 'gif' : 'svg';
-    const outputPath = args.outputPath ?? `qr-code.${extension}`;
+    await this.writeArtifact(args, args.outputPath ?? `qr-code.${extension}`, output);
+  }
 
+  private async writeArtifact(args: CliArgs, outputPath: string, output: string | Uint8Array): Promise<void> {
     // Refuse to clobber existing files unless the user explicitly opted in with --force.
     // The check runs against the resolved path: Bun.write resolves `..` and creates missing
     // intermediate directories, but Bun.file(...).exists() on an unresolved traversing path

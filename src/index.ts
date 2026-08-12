@@ -49,10 +49,18 @@ const info = {
     res.push(last);
     return res;
   },
-  ec_code: { low: 0b01, medium: 0b00, quartile: 0b11, high: 0b10 } as Record<ErrorCorrection, number>,
+  ec_code: { low: 0b01, medium: 0b00, quartile: 0b11, high: 0b10 },
   format_mask: 0b101010000010010,
   format_bits(ecc: ErrorCorrection, mask_idx: Mask) {
-    const data = (info.ec_code[ecc] << 3) | mask_idx;
+    // `info` is re-exported via `utils`, so both arguments can arrive unvalidated. Without
+    // these guards an unknown ecc yielded `undefined << 3` === 0, silently aliasing to
+    // `medium`'s code, and an out-of-range mask overflowed the 15-bit format field.
+    const ec_code = info.ec_code[ecc];
+    if (ec_code === undefined) {
+      throw new Error(`Invalid error correction mode=${ecc}. Expected: ${EC_MODE}`);
+    }
+    validate_mask(mask_idx);
+    const data = (ec_code << 3) | mask_idx;
     let d = data;
     for (let i = 0;i < 10;i++) d = (d << 1) ^ ((d >> 9) * 0b10100110111);
     return ((data << 10) | d) ^ info.format_mask;
@@ -80,12 +88,19 @@ const info = {
   },
   mode_bits: { numeric: '0001', alphanumeric: '0010', byte: '0100', kanji: '1000', eci: '0111' },
   capacity(ver: Version, ecc: ErrorCorrection) {
-    // `info` is re-exported via `utils`, so `ver` can arrive here unvalidated despite the
-    // branded type. The tables hold exactly 40 entries; without this check an out-of-range
-    // version silently produced NaN capacities instead of failing.
+    // `info` is re-exported via `utils`, so `ver` and `ecc` can arrive here unvalidated
+    // despite the branded type. The ecc key is checked first: indexing the per-ecc tables
+    // with an unknown key threw a raw `TypeError` instead of the actionable message below.
+    const words_table = WORDS_PER_BLOCK[ecc];
+    const blocks_table = ECC_BLOCKS[ecc];
+    if (words_table === undefined || blocks_table === undefined) {
+      throw new Error(`Invalid error correction mode=${ecc}. Expected: ${EC_MODE}`);
+    }
+    // The tables hold exactly 40 entries; without this check an out-of-range version
+    // silently produced NaN capacities instead of failing.
     const bytes = BYTES[ver - 1];
-    const words = WORDS_PER_BLOCK[ecc][ver - 1];
-    const num_blocks = ECC_BLOCKS[ecc][ver - 1];
+    const words = words_table[ver - 1];
+    const num_blocks = blocks_table[ver - 1];
     if (bytes === undefined || words === undefined || num_blocks === undefined) {
       throw new Error(`Invalid version=${ver}. Expected number [1..40]`);
     }
@@ -106,8 +121,16 @@ function interleave(ver: Version, ecc: ErrorCorrection): Coder<Uint8Array, Uint8
   return create_interleaver(info.capacity(ver, ecc));
 }
 
+/**
+ * Re-validates its arguments because `utils` re-exports it: the branded `Version` type is
+ * erased at runtime, and `info.size.encode` is pure arithmetic that happily produced a
+ * 17x17 symbol for version 0 or a 27x27 one for version 2.5.
+ */
 function draw_template(ver: Version, ecc: ErrorCorrection, mask_idx: Mask, test: boolean = false): Bitmap {
-  return draw_template_core(info, ver, ecc, mask_idx, test);
+  const version = validate_version(ver);
+  validate_ecc(ecc);
+  validate_mask(mask_idx);
+  return draw_template_core(info, version, ecc, mask_idx, test);
 }
 
 function zigzag(tpl: Bitmap, mask_idx: Mask, fn: (x: number, y: number, mask: boolean) => void): void {
@@ -193,6 +216,25 @@ function validate_mask(mask: Mask): void {
 }
 
 /**
+ * Upper bound on the quiet-zone width, in modules.
+ *
+ * ISO/IEC 18004 specifies a 4-module quiet zone; the largest symbol is 177 modules wide, so
+ * a border wider than the biggest possible symbol is already well past any legitimate use.
+ * 1024 is chosen to match the `[1..1024]` bound `Bitmap.scale` applies, and caps the matrix
+ * at 177 + 2*1024 = 2225 modules per side (~4.9M cells) instead of the previously unbounded
+ * allocation — `border: 20000` built a 40021x40021 matrix and `border: 100000` never returned.
+ */
+const MAX_BORDER = 1024;
+
+function validate_border(border: number): void {
+  // The old check tested only `Number.isSafeInteger`, so negatives fell through to
+  // `new Array(-1)` inside `fill_arr` and surfaced as a raw `RangeError`.
+  if (!Number.isSafeInteger(border) || border < 0 || border > MAX_BORDER) {
+    throw new Error(`invalid border: ${border}. Expected number [0..${MAX_BORDER}]`);
+  }
+}
+
+/**
  * Validate that `ver` is a safe integer in [1, 40] and return it as a branded `Version`.
  * @throws if `ver` is out of range
  */
@@ -201,6 +243,25 @@ export function validate_version(ver: number): Version {
     throw new Error(`Invalid version=${ver}. Expected number [1..40]`);
   }
   return ver as Version;
+}
+
+/**
+ * Wrap a caller-supplied `text_encoder` so its return value is checked on every call.
+ *
+ * An encoder returning anything other than a `Uint8Array` used to flow straight into
+ * `encode_payload`, where `for (const byte of ...)` iterated a string's characters and
+ * `(NaN >>> i) & 1` evaluated to 0 — silently producing a valid, scannable symbol that
+ * encoded NUL bytes instead of the payload. The encoder is called from two places
+ * (`payload_bits` and `encode`), so validation is centralized here.
+ */
+function guard_encoder(encoder: (value: string) => Uint8Array): (value: string) => Uint8Array {
+  return (value: string) => {
+    const bytes = encoder(value);
+    if (!(bytes instanceof Uint8Array)) {
+      throw new Error(`text_encoder must return a Uint8Array, got ${bytes === null ? 'null' : typeof bytes}`);
+    }
+    return bytes;
+  };
 }
 
 /**
@@ -237,13 +298,7 @@ function payload_bits(text: string, type: EncodingType, encoder: (value: string)
  * using thrown exceptions as control flow. Only a genuine capacity shortfall produces an
  * error here; real internal faults propagate from the subsequent `encode` call.
  */
-function select_version(
-  ecc: ErrorCorrection,
-  text: string,
-  encoding: EncodingType,
-  text_encoder: ((text: string) => Uint8Array) | undefined
-): Version {
-  const encoder = text_encoder ?? utf8_to_bytes;
+function select_version(ecc: ErrorCorrection, text: string, encoding: EncodingType, encoder: (text: string) => Uint8Array): Version {
   const { bits, length } = payload_bits(text, encoding, encoder);
 
   for (let i = 1;i <= 40;i++) {
@@ -263,23 +318,31 @@ export function encode_qr(text: string, output: 'ascii' | 'term', opts?: QrOpts)
 export function encode_qr(text: string, output: 'svg', opts?: QrOpts & SvgQrOpts): string;
 export function encode_qr(text: string, output: 'gif', opts?: QrOpts): Uint8Array;
 export function encode_qr(text: string, output: Output = 'raw', opts: QrOpts & SvgQrOpts = {}) {
+  // `detect_type` iterates `text` and runs before `utf8_to_bytes`' own guard, so a non-string
+  // leaked a raw `TypeError: number is not iterable` out of the engine. Same for a null/
+  // non-object `opts`, which faulted on the first property read.
+  if (typeof text !== 'string') throw new Error(`Invalid text type=${text === null ? 'null' : typeof text}. Expected string`);
+  if (typeof opts !== 'object' || opts === null) {
+    throw new Error(`Invalid opts type=${opts === null ? 'null' : typeof opts}. Expected object`);
+  }
   const ecc = opts.ecc !== undefined ? opts.ecc : 'medium';
   validate_ecc(ecc);
   const encoding = opts.encoding !== undefined ? opts.encoding : detect_type(text);
   validate_encoding(encoding);
   if (opts.mask !== undefined) validate_mask(opts.mask as Mask);
+  const encoder = guard_encoder(opts.text_encoder ?? utf8_to_bytes);
 
   let ver: Version;
   if (opts.version !== undefined) {
     ver = validate_version(opts.version);
   } else {
-    ver = select_version(ecc, text, encoding, opts.text_encoder);
+    ver = select_version(ecc, text, encoding, encoder);
   }
-  const data = encode(ver, ecc, text, encoding, opts.text_encoder);
+  const data = encode(ver, ecc, text, encoding, encoder);
   let res = draw_qr_best(ver, ecc, data, opts.mask as Mask);
   res.assert_drawn();
   const border = opts.border === undefined ? 2 : opts.border;
-  if (!Number.isSafeInteger(border)) throw new Error(`invalid border type=${typeof border}`);
+  validate_border(border);
   res = res.border(border, false);
   if (opts.scale !== undefined) res = res.scale(opts.scale);
   if (output === 'raw') return res.data;

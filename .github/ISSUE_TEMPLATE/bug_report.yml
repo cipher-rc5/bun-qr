@@ -1,0 +1,73 @@
+name: Bug report
+description: Report incorrect behavior in bun-qr
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug.
+
+        **Do not report security vulnerabilities here.** See
+        [SECURITY.md](https://github.com/cipher-rc5/bun-qr/blob/main/SECURITY.md) for private disclosure.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you observe, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: >
+        The single most useful thing you can provide is the exact input that triggers the problem.
+        A short, self-contained snippet we can run with `bun run` is ideal.
+      render: typescript
+      placeholder: |
+        import encode_qr from 'bun-qr';
+
+        const out = encode_qr('the exact input that fails', 'svg');
+        console.log(out);
+    validations:
+      required: true
+
+  - type: input
+    id: bun-version
+    attributes:
+      label: Bun version
+      description: Output of `bun --version`.
+      placeholder: "1.3.14"
+    validations:
+      required: true
+
+  - type: input
+    id: package-version
+    attributes:
+      label: bun-qr version
+      placeholder: "0.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Error output, stack traces, or the produced QR image if relevant.
+    validations:
+      required: false

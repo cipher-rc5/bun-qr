@@ -23,6 +23,10 @@ QR code generator built using the bun runtime. Zero dependencies, strict TypeScr
 
 ### As a dependency
 
+> **Not yet published.** `bun-qr` has not been released to npm, so the command below will
+> not resolve yet. Until the first release, install from source or from a git reference:
+> `bun add github:cipher-rc5/bun-qr`.
+
 ```bash
 bun add bun-qr
 ```
@@ -261,9 +265,36 @@ const svg = encode_qr('café', 'svg', { encoding: 'byte', text_encoder: latin1 }
 > strings, or let it perform I/O. A `text_encoder` that returns more bytes than the chosen
 > version can hold causes encoding to fail rather than silently truncate.
 
+### Other Exports
+
+Also available from `bun-qr`:
+
+- **`validate_version(n)`**: Validate an integer in `[1, 40]` and return it as a branded
+  `Version`. This is the only supported way to construct a `Version` — do not cast.
+  Throws if `n` is out of range.
+- **`utf8_to_bytes(text)`**: The default `text_encoder` — UTF-8 encoding via `TextEncoder`.
+- **`EC_MODE`**: Readonly tuple of the four error-correction levels.
+- **`ENCODING`**: Readonly tuple of the encoding-mode names.
+
+And from `bun-qr/links`:
+
+- **`validate_url(url)`**: Returns whether a URL is well-formed and uses a permitted scheme.
+- **`SAFE_URL_SCHEMES`**: The scheme allowlist (`http:`, `https:`) enforced by `encode_url`.
+
+> `utils` and `_tests` are also exported but are **internal and outside semantic
+> versioning**. Their shapes track the encoder's implementation and may change in any
+> release, including a patch.
+
 ### Link Encoding Functions
 
 All link encoding functions are available from `bun-qr/links`:
+
+> **Handling untrusted input:** these functions escape and validate their fields so that
+> attacker-controlled values cannot inject extra records into the encoded payload — a
+> `;` in a WiFi SSID or a `\r\n` in a vCard field is escaped, not passed through. Invalid
+> values (a malformed coordinate, a non-finite number, an unrecognised WiFi security mode)
+> throw rather than producing a silently wrong QR code. Handle those errors; do not assume
+> every input yields a payload.
 
 - **`encode_url(url, options?)`**: Format and validate URLs
   - `auto_protocol`: Add `https://` if missing (default: true)

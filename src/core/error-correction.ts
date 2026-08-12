@@ -60,7 +60,14 @@ const GF = {
     return GF.read_exp((GF.read_log(x) + GF.read_log(y)) % 255);
   },
   add: (x: number, y: number) => x ^ y,
-  pow: (x: number, e: number) => GF.read_exp((GF.read_log(x) * e) % 255),
+  // 0 is guarded explicitly, as in `log`/`inv`: `log[0]` is never assigned by the table
+  // init above (it only sets log[exp[i]], and exp[i] is never 0), so it keeps its 0 seed
+  // and would make `pow(0, e)` read exp(0) = 1 for every e. In GF(2^8), 0^e is 0 for
+  // e >= 1; 0^0 is 1 by the usual empty-product convention, matching Math.pow(0, 0).
+  pow(x: number, e: number) {
+    if (x === 0) return e === 0 ? 1 : 0;
+    return GF.read_exp((GF.read_log(x) * e) % 255);
+  },
   inv(x: number) {
     if (x === 0) throw new Error(`GF.inverse: invalid arg=${x}`);
     return GF.read_exp(255 - GF.read_log(x));
