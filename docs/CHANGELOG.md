@@ -62,10 +62,15 @@ verified structurally against ISO/IEC 18004 rather than by a full data-region ro
 - Fixture-based regression coverage in `tests/fixtures/qr-fixtures.json` with SHA-256 + length checks.
 - Benchmark suite in `tests/benchmark.ts` (`bun run bench`).
 - GitHub Actions CI workflow (`.github/workflows/ci.yml`) with format check, typecheck, test coverage, and benchmark artifact upload.
-- GitHub Actions release workflow (`.github/workflows/release.yml`) triggered on `v*` tags; publishes to npm with
-  provenance attestation. The publish step is the one place this project shells out to npm's CLI instead of Bun's:
-  `bun publish` has no `--provenance` flag as of Bun 1.3.14 and silently ignores unknown flags, so using it would
-  produce a green release with no attestation. Revert to `bun publish --provenance` once Bun supports it.
+- GitHub Actions release workflow (`.github/workflows/release.yml`) triggered on `v*` tags; publishes with
+  `bun publish`, attaching SHA-256 checksums and a CycloneDX SBOM to the GitHub Release. The pipeline is Bun-only
+  end to end — no `npm`, `npx`, or Node toolchain. It therefore does not produce npm provenance attestation:
+  `bun publish` has no `--provenance` flag as of Bun 1.3.14 ([oven-sh/bun#15601](https://github.com/oven-sh/bun/issues/15601))
+  and silently ignores unknown flags, so passing one would yield a green release with no attestation and no warning.
+- `scripts/sbom.ts`: generates a CycloneDX 1.6 SBOM from `bun.lock`. The npm-based generators cannot run under Bun
+  (`@cyclonedx/cyclonedx-npm` segfaults on its native `libxmljs2` binding; `cyclonedx-bom` fails to parse), and they
+  inventory the build host's Node install rather than the published artifact. Output is byte-deterministic, carries
+  integrity hashes through from the lockfile, and states explicitly that the package ships zero runtime dependencies.
 - `justfile` with recipes: `default` (typecheck + test), `ci`, `typecheck`, `test`, `coverage`, `bench`, `fmt`, `fmt-check`, `build`, `verify-package`, `clean`.
 - `SECURITY.md` describing responsible disclosure via GitHub Private Security Advisory.
 - `tsconfig.build.json` for declaration-only emit (inherits `bundler` module resolution, `types/` output).

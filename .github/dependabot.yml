@@ -28,6 +28,11 @@ updates:
 
   # The package has zero runtime dependencies, so this covers devDependencies
   # (@types/bun, typescript) only. Both are exact-pinned in package.json.
+  #
+  # `npm` here is Dependabot's identifier for the JavaScript registry ecosystem,
+  # not a package manager choice: it is the value that makes Dependabot read
+  # `bun.lock`. There is no `bun` ecosystem value. Nothing in this repository
+  # executes npm.
   - package-ecosystem: npm
     directory: /
     schedule:
