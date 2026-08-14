@@ -20,6 +20,7 @@
     "bench": "bun run tests/benchmark.ts",
     "fmt": "bunx dprint fmt",
     "fmt:check": "bunx dprint check",
+    "postinstall": "test -f dprint.json && bun run fmt || true",
     "prepublishOnly": "bun run fmt:check && bun run typecheck && bun test && bun run build"
   },
   "exports": {
