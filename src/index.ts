@@ -177,10 +177,11 @@ export type QrOpts = {
     | EncodingType
     | undefined,
   /**
-   * Custom UTF-8 encoder. This function receives potentially untrusted user input (the `text`
+   * Custom byte encoder for byte mode (default: UTF-8). Called once per QR generation.
+   * No ECI designator is added for custom charsets. This function receives untrusted input (the `text`
    * argument passed to `encode_qr`). Ensure your encoder does not execute or eval the input.
    * @param text - raw user-supplied string
-   * @returns UTF-8 byte representation
+   * @returns Payload bytes as a Uint8Array
    */
   text_encoder?:
     | ((text: string) => Uint8Array)
@@ -272,7 +273,7 @@ function guard_encoder(encoder: (value: string) => Uint8Array): (value: string) 
  * Mirrors the bit layout produced by `encode_payload`:
  * - numeric: 10 bits per group of 3 digits, plus 4 bits for 1 leftover or 7 for 2
  * - alphanumeric: 11 bits per pair, plus 6 for a leftover character
- * - byte: 8 bits per UTF-8 byte
+ * - byte: 8 bits per encoded byte (UTF-8 by default)
  */
 function payload_bits(text: string, type: EncodingType, encoder: (value: string) => Uint8Array): { bits: number, length: number } {
   if (type === 'numeric') {

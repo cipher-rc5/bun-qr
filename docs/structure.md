@@ -4,7 +4,10 @@
 
 ```text
 bun-qr/
+|- .agents/skills/          Contributor workflow skills
 |- .github/
+|  |- ISSUE_TEMPLATE/
+|  |- PULL_REQUEST_TEMPLATE.md
 |  `- workflows/
 |     |- ci.yml
 |     `- release.yml
@@ -53,7 +56,8 @@ bun-qr/
 |  |  |- encoder.test.ts
 |  |  |- error-correction.test.ts
 |  |  |- layout.test.ts
-|  |  `- penalty.test.ts
+|  |  |- penalty.test.ts
+|  |  `- utils.test.ts
 |  |- fixtures/
 |  |  |- benchmark-fixtures.json
 |  |  |- link-fixtures.json
@@ -73,8 +77,13 @@ bun-qr/
 |  `- roundtrip.test.ts
 |- LICENSE
 |- LICENSE-MIT
+|- CODE_OF_CONDUCT.md
+|- CONTRIBUTING.md
 |- README.md
 |- SECURITY.md
+|- .bun-version
+|- .editorconfig
+|- .gitignore
 |- biome.json
 |- bunfig.toml
 |- dprint.json
@@ -91,6 +100,8 @@ bun-qr/
 - `src/core/*`: isolated QR internals (encoding, layout, penalty, bitmap, ECC, lookup tables, shared utils).
 - `src/cli/*`: CLI layers separated by concern (parse, normalize, generate, present).
 - `src/links.ts`: structured payload helpers for common QR data formats.
+- `src/runtime.ts`: Bun presence check used by both public entry points.
+- `src/decode.ts` and `src/dom.ts`: repository-only scaffolds, excluded from package files and public exports.
 - `tests/core/*`: white-box unit tests for the individual core modules.
 - `tests/roundtrip.test.ts`: ISO/IEC 18004 structural verification independent of encoder internals.
 - `tests/interop.test.ts`: independent QR payload/GIF pixel decoding with development-only decoders.
@@ -102,10 +113,13 @@ bun-qr/
 
 - Runtime/tooling/package manager: Bun
 - `bunfig.toml` and `bunx --bun` force JavaScript dependency wrappers to use Bun; public entry points reject a missing Bun runtime. Filesystem compatibility APIs are provided by Bun itself.
+- Utility scripts and benchmarks use Bun APIs/Bun Shell without Node imports/globals. CLI internals and some test fixtures use Bun compatibility APIs; third-party Actions use GitHub-managed runtimes.
+- Biome linting and dprint formatting run separately. dprint plugins are exact-pinned `npm:` references in `dprint.json`.
 - API style: snake_case for core QR API compatibility style
 - Type system: strict TypeScript with no implicit unsafety
 - Validation strategy:
   - typecheck via `bun run typecheck`
+  - formatting via `bun run fmt:check` and linting via `bun run lint`
   - tests via `bun test`
   - benchmarks via `bun run bench`
 
@@ -113,6 +127,6 @@ bun-qr/
 
 `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests.
 
-The prerequisite `version-pin` job checks the executing runtime, engine minimum, development and workflow pins, and test matrix. The `test` job installs with the frozen lockfile, audits dependencies, checks dprint and Biome, typechecks and builds declarations, verifies packed consumer imports and types, then runs coverage. GitHub uploads the coverage report.
+The prerequisite `version-pin` job checks the executing runtime, engine minimum, development and workflow pins, and test matrix. The `test` job installs with the frozen lockfile, audits dependencies, checks dprint and Biome, typechecks and builds declarations, verifies packed consumer imports and types, then prints coverage. Its upload step targets `coverage/`, but no file reporter is configured, so the current command produces no coverage artifact.
 
 The `benchmark` job runs only on `main`, uploading the measurement output. Releases re-run the validation gates, verify the tag/version match and exact package archive, generate checksums and an SBOM, attest the tarball with GitHub/Sigstore and publish that same archive. See [release verification](RELEASE_VERIFICATION.md).

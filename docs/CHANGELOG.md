@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Biome linting with recommended rules, warnings treated as failures, and Node import/global restrictions for utility scripts and the benchmark. dprint remains the formatter.
+
 ### Fixed
 
 - GIF LZW width transitions now preserve decoded pixels; independent GIF/QR decoders cover width boundaries, dictionary resets, all QR versions, encoding modes, ECC levels and masks.
@@ -15,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - URL helpers share scheme detection with the CLI and reject explicit unsupported schemes before adding HTTPS.
 - vCard 4.0 requires a formatted name, derived from personal names or organization when available. A `formatted_name` option supports other contacts. Phones use `tel:` URI values; website URLs are validated and serialized as HTTP/HTTPS URIs. Content lines use CRLF and UTF-8-safe folding.
 - Calendar QR fragments use CRLF and reject an end at or before start in the emitted DATE/DATE-TIME format, including same-day all-day and subsecond timed endpoints.
-- Phone/SMS/vCard/WhatsApp normalization rejects embedded or repeated plus signs and controls.
+- Phone/SMS/vCard/WhatsApp normalization trims surrounding whitespace and rejects embedded or repeated plus signs and internal controls.
 - Bitcoin requests serialize decimal BTC without exponent notation, accept one optional `bitcoin:` prefix and reject sub-satoshi precision, rounding and amounts above 21000000 BTC. Address checksum/network validation remains the caller's responsibility.
 - Public QR overloads accept omitted/default output and dynamic `Output` values. Byte-mode text encoding runs once per generation.
 
@@ -25,8 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic dependency install scripts are disabled; precompiled development tools initialize through their Bun-executed wrappers.
 - Bun 1.4.2 is the supported minimum and development/CI/release pin; verification enforces the manifest, matrix and workflow pins together.
 - dprint and independent test decoders are exact-pinned development dependencies. Installation no longer formats source or suppresses formatter errors.
+- Utility scripts use Bun file/path/spawn APIs and Bun Shell, including private temporary-directory creation and cleanup. The benchmark uses Bun timing and host metadata without Node globals.
+- Formatter plugins use pinned npm registry references: TypeScript 0.96.1, JSON 0.25.2, Markdown 0.26.0, TOML 0.9.0, and YAML 0.6.0. Registry references do not require the npm CLI.
 - `just ci` includes audit, toolchain and consumer package verification with coverage. Concrete presenter and executable CLI tests verify routing, colors, files and exit codes.
 - Tag releases verify consumer imports and declarations, produce signed GitHub/Sigstore provenance and publish the same checked/attested tarball. The release bundle and verification instructions are provided separately from npm registry provenance.
+- Documentation now describes actual defaults, option bounds, all-format CLI file output, and the current geo/control-character and console-only coverage limitations.
 
 ## [0.2.0] — unreleased
 
@@ -44,9 +51,8 @@ verified structurally against ISO/IEC 18004 and through independent data-region 
   previously interpolated into the payload unescaped and unchecked — the TypeScript union
   is erased at runtime — so a value such as `'WPA;S:Evil'` injected a second `S:` field and
   could forge the network a scanning device joins.
-- `encode_vcard` now escapes the `URL` field, which alone among the text properties bypassed
-  `escape_vcard`, allowing `\r\n` in a website value to inject arbitrary vCard properties
-  (for example a `TEL:` the author never entered).
+- `encode_vcard` validates website fields as HTTP/HTTPS URIs before serialization, preventing
+  line breaks in a website value from injecting vCard properties.
 - `escape_vcard` now escapes bare `\r` as well as `\n`, per RFC 6350 §3.2. Escaping only
   `\n` left a real carriage return in the output, so CRLF injection survived escaping in
   every vCard and VEVENT field.
@@ -68,10 +74,10 @@ verified structurally against ISO/IEC 18004 and through independent data-region 
 - CLI exit codes changed: a missing `<url>` argument now exits `2` (usage) instead of `0`,
   so scripts can detect it. `--help` still exits `0`.
 - Mask selection changed for some payloads, following the ISO/IEC 18004 §6.8.2.2 rule-3
-  fix. Output remains spec-valid, but symbols encoded by this release may differ
+  fix. Encoded symbols may differ
   bit-for-bit from those produced by the untagged `0.1.0` tree.
-- The CLI writes the artifact to stdout and status messages to stderr; colorization is
-  disabled when stdout is not a TTY.
+- The CLI writes ASCII/terminal output to stdout unless `--output` is provided. SVG/GIF default
+  to output files. Status messages use stderr; presenter colors check each stream's TTY independently.
 - `--output` refuses to overwrite an existing file without `--force`/`-F`.
 - Unknown CLI options are rejected rather than silently ignored.
 
@@ -84,8 +90,8 @@ verified structurally against ISO/IEC 18004 and through independent data-region 
 - Benchmark suite in `tests/benchmark.ts` (`bun run bench`).
 - GitHub Actions CI workflow (`.github/workflows/ci.yml`) with format check, typecheck, test coverage, and benchmark artifact upload.
 - GitHub Actions release workflow (`.github/workflows/release.yml`) triggered on `v*` tags; publishes with
-  `bun publish`, attaching SHA-256 checksums and a CycloneDX SBOM to the GitHub Release. The pipeline is Bun-only
-  end to end — no `npm`, `npx`, or Node package manager/toolchain. GitHub Actions provides signed artifact
+  `bun publish`, attaching SHA-256 checksums and a CycloneDX SBOM to the GitHub Release. Project-authored
+  JavaScript/TypeScript uses Bun, and third-party Actions use GitHub-managed runtimes. GitHub provides signed artifact
   provenance separately; npm registry provenance is not asserted. `bun publish --help` in Bun 1.4.2 does not list
   a provenance option (see [oven-sh/bun#15601](https://github.com/oven-sh/bun/issues/15601)).
 - `scripts/sbom.ts`: generates a CycloneDX 1.6 SBOM from `bun.lock`. The npm-based generators cannot run under Bun
@@ -102,7 +108,7 @@ verified structurally against ISO/IEC 18004 and through independent data-region 
 - `_tests` export hooks in `src/core/error-correction.ts`, `src/core/penalty.ts`, and `src/core/encoder.ts` for white-box unit testing.
 - `MAX_QR_PIXELS = 16_000_000` guard in `src/core/bitmap.ts` for `to_gif()` and `to_image()`.
 - Correct 2-color LZW GIF encoder in `src/core/bitmap.ts` (GIF87a, min code size 2, bit-packed LSB-first, CLEAR/EOI codes, table-full reset).
-- `SAFE_URL_SCHEMES` allowlist (`http:`, `https:`) in `src/links.ts`; `validate_url` now rejects non-HTTP/HTTPS schemes.
+- `SAFE_URL_SCHEMES` informational set (`http:`, `https:`) in `src/links.ts`; an internal predicate enforces the URL policy independently of set mutation.
 - Control character check (`has_control_chars`) guarding SSID and password fields in `encode_wifi()`.
 - `encode_vcard()` upgraded to vCard 4.0 (RFC 6350): CRLF line endings, `VERSION:4.0`, `TEL;TYPE=voice:`, `EMAIL;TYPE=work:`, `URL;TYPE=work:`, `ADR;TYPE=work:`.
 - Unit tests: `tests/core/error-correction.test.ts`, `tests/core/penalty.test.ts`, `tests/core/layout.test.ts`, `tests/core/encoder.test.ts`.
@@ -113,7 +119,7 @@ verified structurally against ISO/IEC 18004 and through independent data-region 
 - `--` end-of-options separator; all following arguments are treated as positional.
 - `LICENSE` (Apache-2.0) and `LICENSE-MIT`, both carried over verbatim from upstream `paulmillr/qr` so the fork's terms and copyright notice match the original exactly, plus a `"license": "(MIT OR Apache-2.0)"` field in `package.json` matching upstream's SPDX expression. The package previously shipped no license file at all despite the README claiming dual licensing.
 - `tests/roundtrip.test.ts`: independent ISO/IEC 18004 verification of rendered symbols — format-information BCH(15,5), version BCH(18,6), function-pattern geometry, and published byte-capacity limits.
-- `tests/core/bitmap.test.ts`: coverage for all four renderers, geometry primitives, and the `MAX_QR_PIXELS` guard.
+- `tests/core/bitmap.test.ts`: coverage for bitmap renderers, geometry primitives, and the `MAX_QR_PIXELS` guard.
 
 ### Changed
 
@@ -126,7 +132,7 @@ verified structurally against ISO/IEC 18004 and through independent data-region 
 - Applied dprint formatting across all source files (commits `f651a3a`, `f4a85ad`).
 - Strengthened `tsconfig.json`: `noUnusedLocals` and `noUnusedParameters` enabled.
 - `get_size()` in `src/dom.ts` now uses `getComputedStyle` instead of `.offsetWidth`/`.offsetHeight` and throws a descriptive error on non-positive dimensions.
-- GIF output is now ~7–8× smaller due to correct LZW compression replacing the previous uncompressed pixel dump.
+- GIF output uses LZW compression instead of the previous uncompressed pixel dump; the size difference depends on payload and scale.
 - `QrOpts.version` remains `number | undefined` in the public API; validated internally via `validate_version()`.
 - Peer dependency on `typescript` relaxed to `">=5.0.0"` and marked optional via `peerDependenciesMeta`.
 
@@ -140,13 +146,12 @@ verified structurally against ISO/IEC 18004 and through independent data-region 
 - `version_bits` helper: `let d: number = ver` prevents the branded `Version` type from propagating into arithmetic temporaries.
 - vCard output now uses CRLF line endings and vCard 4.0 type parameters as required by RFC 6350.
 - URL validation in `src/links.ts` now rejects `javascript:`, `data:`, and other non-HTTP/HTTPS schemes.
-- GIF fixture in `tests/fixtures/qr-fixtures.json` updated to reflect LZW-compressed output (`length: 171`).
+- GIF fixture in `tests/fixtures/qr-fixtures.json` updated to reflect LZW-compressed output; its current length is 170 bytes after the width-transition fix.
 
 ## [0.1.0] — unreleased
 
-`package.json` carries version `0.1.0`, but this version has never been tagged or
-published; no git tags exist in the repository. The entries below describe the initial
-implementation as it stands on `main`.
+The initial implementation carried version `0.1.0` and was never released. The entries below
+describe that historical implementation; the current manifest version is `0.2.0`.
 
 ### Added
 

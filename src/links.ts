@@ -76,7 +76,7 @@ export interface CalendarEventOptions {
 
 // Validation helpers
 
-/** Allowlist of URL schemes permitted in QR payloads. Blocks javascript:, data:, file:, ftp:, etc. */
+/** Informational scheme set; the internal HTTP/HTTPS policy does not depend on mutations to this set. */
 export const SAFE_URL_SCHEMES: ReadonlySet<string> = new Set(['http:', 'https:']);
 
 export function validate_url(url: string): boolean {
@@ -446,8 +446,8 @@ export function encode_geo(opts: GeoOptions): string {
  * ```typescript
  * const event = encode_calendar_event({
  *   title: 'Team Meeting',
- *   start: new Date('2024-02-01T14:00:00'),
- *   end: new Date('2024-02-01T15:00:00'),
+ *   start: new Date('2024-02-01T14:00:00Z'),
+ *   end: new Date('2024-02-01T15:00:00Z'),
  *   location: 'Conference Room A',
  *   description: 'Weekly team sync'
  * });

@@ -17,6 +17,8 @@ bun-qr/
 |  |- biome.json             Biome lint configuration
 |  |- bunfig.toml            Force Bun for script and dependency execution
 |  |- dprint.json            Formatter configuration
+|  |- .editorconfig          Editor formatting defaults
+|  |- .gitignore             Generated artifacts and local files
 |  |- justfile               Local validation/task recipes
 |  |- .bun-version           Pinned Bun version
 |  `- bun.lock               Bun lockfile
@@ -32,10 +34,13 @@ bun-qr/
 |- Documentation
 |  |- README.md
 |  |- SECURITY.md
+|  |- CONTRIBUTING.md
+|  |- CODE_OF_CONDUCT.md
 |  |- docs/CHANGELOG.md
 |  |- docs/summary.md
 |  |- docs/structure.md
 |  |- docs/tree.md
+|  |- docs/RELEASE_VERIFICATION.md
 |  `- docs/LINK_ENCODING.md
 |
 |- Source (src/)
@@ -84,7 +89,8 @@ bun-qr/
 |  |  |- encoder.test.ts     Mode detection + bit packing
 |  |  |- error-correction.test.ts
 |  |  |- layout.test.ts
-|  |  `- penalty.test.ts
+|  |  |- penalty.test.ts
+|  |  `- utils.test.ts
 |  |
 |  `- fixtures/
 |     |- qr-fixtures.json
@@ -97,6 +103,16 @@ bun-qr/
 |  |- verify-package.ts      Packed exports and consumer declarations
 |  `- verify-toolchain.ts    Engine, runtime, matrix and pins
 |
+|- Contributor workflows (.agents/skills/)
+|  |- agent-browser/
+|  |- code-review/
+|  |- git-c-all/
+|  `- security-audit/
+|
+|- GitHub templates (.github/)
+|  |- PULL_REQUEST_TEMPLATE.md
+|  `- ISSUE_TEMPLATE/
+|
 `- Examples (examples/)
    |- basic.ts
    |- links.ts
@@ -105,10 +121,18 @@ bun-qr/
 
 ## Common commands
 
-- Install: `bun install`
+- Install: `bun install --frozen-lockfile`
+- Toolchain: `bun run verify:toolchain`
+- Lint: `bun run lint`
 - Typecheck: `bun run typecheck`
 - Test: `bun test`
 - Coverage: `bun test --coverage`
 - Format: `bunx --bun dprint fmt`
+- Build declarations: `bun run build`
+- Verify package: `bun run build && bun run verify:package`
 - Bench: `bun run bench`
 - CLI: `bun run qr -- https://bun.com --format svg --output bun.svg`
+
+Generated declarations (`types/`), package archives (`dist-artifacts/`), and file coverage reports (`coverage/`)
+are ignored artifacts. `bun test --coverage` prints text; add `--coverage-reporter=lcov` to produce `coverage/lcov.info`.
+`src/decode.ts` and `src/dom.ts` remain in the repository but are excluded from published package files.

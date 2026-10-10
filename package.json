@@ -2,16 +2,32 @@
   "name": "bun-qr",
   "version": "0.2.0",
   "description": "QR code generator with link encoding utilities for Bun runtime",
-  "license": "(MIT OR Apache-2.0)",
-  "repository": { "type": "git", "url": "git+https://github.com/cipher-rc5/bun-qr.git" },
+  "keywords": ["qr", "qrcode", "bun", "encoder", "svg", "gif", "zero-dependency"],
   "homepage": "https://github.com/cipher-rc5/bun-qr#readme",
   "bugs": { "url": "https://github.com/cipher-rc5/bun-qr/issues" },
-  "keywords": ["qr", "qrcode", "bun", "encoder", "svg", "gif", "zero-dependency"],
-  "module": "src/index.ts",
+  "repository": { "type": "git", "url": "git+https://github.com/cipher-rc5/bun-qr.git" },
+  "license": "(MIT OR Apache-2.0)",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./types/index.d.ts", "bun": "./src/index.ts" },
+    "./links": { "types": "./types/links.d.ts", "bun": "./src/links.ts" }
+  },
   "main": "src/index.ts",
+  "module": "src/index.ts",
   "types": "types/index.d.ts",
   "bin": { "bun-qr": "./src/cli.ts" },
-  "type": "module",
+  "files": [
+    "src",
+    "types",
+    "!src/decode.ts",
+    "!src/dom.ts",
+    "!types/decode.d.ts*",
+    "!types/dom.d.ts*",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE",
+    "LICENSE-MIT"
+  ],
   "scripts": {
     "build": "bunx --bun tsc --project tsconfig.build.json",
     "typecheck": "bunx --bun tsc --noEmit",
@@ -26,23 +42,6 @@
     "lint:fix": "bunx --bun biome lint --write .",
     "prepublishOnly": "bun run verify:toolchain && bun audit --audit-level=high && bun run fmt:check && bun run lint && bun run typecheck && bun run build && bun test && bun run verify:package"
   },
-  "exports": {
-    ".": { "types": "./types/index.d.ts", "bun": "./src/index.ts" },
-    "./links": { "types": "./types/links.d.ts", "bun": "./src/links.ts" }
-  },
-  "files": [
-    "src",
-    "types",
-    "!src/decode.ts",
-    "!src/dom.ts",
-    "!types/decode.d.ts*",
-    "!types/dom.d.ts*",
-    "README.md",
-    "SECURITY.md",
-    "LICENSE",
-    "LICENSE-MIT"
-  ],
-  "engines": { "bun": ">=1.4.2" },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@types/bun": "1.4.2",
@@ -52,5 +51,6 @@
     "typescript": "7.0.2"
   },
   "peerDependencies": { "typescript": ">=5.0.0" },
-  "peerDependenciesMeta": { "typescript": { "optional": true } }
+  "peerDependenciesMeta": { "typescript": { "optional": true } },
+  "engines": { "bun": ">=1.4.2" }
 }

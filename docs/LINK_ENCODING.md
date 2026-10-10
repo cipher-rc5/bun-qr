@@ -4,17 +4,19 @@ This document explains how to use the link encoding utilities added to `bun-qr` 
 
 ## Overview
 
-The `bun-qr/links` module provides helper functions that format data according to standard QR code conventions. These utilities ensure your QR codes are compatible with popular scanning apps and devices.
+The `bun-qr/links` module formats payload strings for the QR encoder. Bun 1.4.2 or newer is required.
+Support for each payload depends on the receiving scanner or application; the helpers do not open URLs,
+connect to WiFi, or verify payment recipients. See the compatibility limits below.
 
 ## Quick Start
 
 ```typescript
 import encode_qr from 'bun-qr';
-import { encode_url, encode_vcard, encode_wifi } from 'bun-qr/links';
+import { encode_url } from 'bun-qr/links';
 
 // Create a URL QR code
 const url = encode_url('example.com');
-const qr = encode_qr(url, 'svg');
+const qr = encode_qr(url, 'svg', { border: 4 });
 await Bun.write('qr.svg', qr);
 ```
 
@@ -44,6 +46,7 @@ const url3 = encode_url('http://example.com', { auto_protocol: false });
 
 Addresses use unquoted dot-atom syntax with DNS-style domains. Local-part URI punctuation is percent-encoded;
 recipient strings cannot contain additional mailto fields. Subject, body, cc and bcc are encoded query values.
+Only the primary `email` address is validated; `cc` and `bcc` strings are percent-encoded without recipient validation.
 
 ```typescript
 import { encode_email } from 'bun-qr/links';
@@ -64,7 +67,8 @@ const email2 = encode_email('support@example.com', {
 ### 3. Phone Numbers
 
 Phone, SMS, vCard and WhatsApp helpers accept digits, spaces, parentheses, hyphens and at most one leading `+`.
-Embedded/repeated plus signs and control characters are rejected. Formatting preserves the destination digits.
+Embedded/repeated plus signs and internal control characters are rejected. Leading/trailing whitespace is trimmed.
+Formatting preserves the destination digits; helpers do not validate country codes or whether a number exists.
 
 ```typescript
 import { encode_phone } from 'bun-qr/links';
@@ -94,8 +98,11 @@ const sms2 = encode_sms('+1-555-123-4567', { body: 'Thanks for scanning! Reply Y
 A vCard requires a display name: use `formatted_name`, personal name parts, or `organization` as a fallback.
 Empty or nameless cards throw. vCard 4.0 phone values use `tel:` URIs; content lines are UTF-8 folded at 75 octets and terminated with CRLF.
 Website fields follow the HTTP/HTTPS URL policy and are serialized as URIs; malformed URLs and embedded controls throw.
+Free-text fields escape backslashes, commas, semicolons, and line breaks, but do not reject all other ASCII controls.
+Validate such fields before passing untrusted text to a scanner. `formatted_name` overrides the derived display name.
 
 ```typescript
+import encode_qr from 'bun-qr';
 import { encode_vcard } from 'bun-qr/links';
 
 const contact = encode_vcard({
@@ -111,12 +118,17 @@ const contact = encode_vcard({
 });
 
 // Generate QR code with medium error correction
-const qr = encode_qr(contact, 'svg', { ecc: 'medium' });
+const qr = encode_qr(contact, 'svg', { ecc: 'medium', border: 4 });
 ```
 
 ### 6. WiFi Network Credentials
 
+The defaults are `security: 'WPA'`, `password: ''`, and `hidden: false`.
+SSID and password reject ASCII controls and escape payload delimiters. The helper does not validate password strength
+or require a nonempty password for WPA/WEP. Use `security: 'nopass'` explicitly for open networks.
+
 ```typescript
+import encode_qr from 'bun-qr';
 import { encode_wifi } from 'bun-qr/links';
 
 // WPA/WPA2 network
@@ -133,10 +145,17 @@ const wifi_open = encode_wifi({ ssid: 'GuestNetwork', security: 'nopass' });
 const wifi_hidden = encode_wifi({ ssid: 'SecretNetwork', password: 'password123', security: 'WPA', hidden: true });
 
 // Use high error correction for WiFi QR codes
-const qr = encode_qr(wifi, 'svg', { ecc: 'high' });
+const qr = encode_qr(wifi, 'svg', { ecc: 'high', border: 4 });
 ```
 
 ### 7. Geographic Locations
+
+Latitude must be finite and in `[-90, 90]`; longitude must be finite and in `[-180, 180]`.
+Altitude must be finite and uncertainty finite and nonnegative; both use meters.
+
+Current serialization uses `?u=` for uncertainty and JavaScript number formatting, which may emit exponent notation.
+[RFC 5870](https://www.rfc-editor.org/rfc/rfc5870.html#section-3.3) uses `;u=` and decimal-only coordinates.
+The example below records the current output, which strict geo URI consumers may reject. Full RFC 5870 serialization is pending.
 
 ```typescript
 import { encode_geo } from 'bun-qr/links';
@@ -160,6 +179,8 @@ const location2 = encode_geo({
 This helper emits a VEVENT fragment for QR scanners, rather than a complete `.ics` calendar file.
 Dates are serialized in UTC with a four-digit year (0000–9999), timed values have second precision, and an optional end must be strictly later in the emitted format.
 All-day end dates are exclusive: use the next UTC day for a one-day event. Content lines use CRLF and UTF-8-safe folding.
+`all_day` defaults to `false`. Free-text fields escape delimiters and line breaks but do not reject all other ASCII controls.
+The fragment does not include a VCALENDAR wrapper, UID, or DTSTAMP; use a calendar library when producing a complete calendar file.
 
 ```typescript
 import { encode_calendar_event } from 'bun-qr/links';
@@ -167,8 +188,8 @@ import { encode_calendar_event } from 'bun-qr/links';
 // Meeting with specific times
 const meeting = encode_calendar_event({
   title: 'Team Standup',
-  start: new Date('2024-02-15T09:00:00'),
-  end: new Date('2024-02-15T09:30:00'),
+  start: new Date('2024-02-15T09:00:00Z'),
+  end: new Date('2024-02-15T09:30:00Z'),
   location: 'Conference Room A',
   description: 'Daily team sync'
 });
@@ -198,6 +219,7 @@ An address may have one `bitcoin:` prefix, which is not duplicated. The helper c
 the caller remains responsible for checking the address checksum, network and intended recipient.
 
 ```typescript
+import encode_qr from 'bun-qr';
 import { encode_bitcoin } from 'bun-qr/links';
 
 // Address only
@@ -211,14 +233,15 @@ const btc2 = encode_bitcoin('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', {
 });
 
 // Use quartile error correction for payment QR codes
-const qr = encode_qr(btc2, 'svg', { ecc: 'quartile' });
+const qr = encode_qr(btc2, 'svg', { ecc: 'quartile', border: 4 });
 ```
 
 ## Best Practices
 
 ### Error Correction Levels
 
-Choose the appropriate error correction level based on use case:
+Choose the error correction level for expected damage and payload capacity. Higher levels reduce available capacity;
+they do not authenticate a WiFi network, contact, URL, or payment. The conventional recovery percentages are approximate:
 
 - **Low (7%)**: Simple URLs, text content
 - **Medium (15%)**: General purpose (default)
@@ -226,14 +249,21 @@ Choose the appropriate error correction level based on use case:
 - **High (30%)**: WiFi credentials, critical information
 
 ```typescript
+import encode_qr from 'bun-qr';
+import { encode_bitcoin, encode_url, encode_wifi } from 'bun-qr/links';
+
+const wifi = encode_wifi({ ssid: 'MyNetwork', password: 'secret123' });
+const bitcoin = encode_bitcoin('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
+const url = encode_url('example.com');
+
 // Critical data - use high ECC
-const wifi_qr = encode_qr(wifi, 'svg', { ecc: 'high' });
+const wifi_qr = encode_qr(wifi, 'svg', { ecc: 'high', border: 4 });
 
 // Payment - use quartile ECC
-const payment_qr = encode_qr(bitcoin, 'svg', { ecc: 'quartile' });
+const payment_qr = encode_qr(bitcoin, 'svg', { ecc: 'quartile', border: 4 });
 
 // Simple URL - medium is fine
-const url_qr = encode_qr(url, 'svg', { ecc: 'medium' });
+const url_qr = encode_qr(url, 'svg', { ecc: 'medium', border: 4 });
 ```
 
 ### Output Formats
@@ -241,12 +271,17 @@ const url_qr = encode_qr(url, 'svg', { ecc: 'medium' });
 Different formats for different use cases:
 
 ```typescript
+import encode_qr from 'bun-qr';
+import { encode_url } from 'bun-qr/links';
+
+const url = encode_url('example.com');
+
 // SVG - Scalable, best for printing
-const svg = encode_qr(url, 'svg', { scale: 10 });
+const svg = encode_qr(url, 'svg', { border: 4 });
 await Bun.write('qr.svg', svg);
 
 // GIF - Raster image for web
-const gif = encode_qr(url, 'gif', { scale: 4 });
+const gif = encode_qr(url, 'gif', { border: 4, scale: 4 });
 await Bun.write('qr.gif', gif);
 
 // ASCII - Terminal display, email
@@ -264,18 +299,29 @@ const raw = encode_qr(url, 'raw');
 
 ### Border and Scale
 
-Adjust border and scale for different display contexts:
+The API defaults to `border: 2` and `scale: 1`. A QR quiet zone needs four modules on every side;
+use `border: 4` or provide the remaining clear space in the surrounding layout. See
+[DENSO WAVE's margin guidance](https://www.qrcode.com/en/howto/code.html).
+Border accepts integers `0`–`1024`, scale accepts integers `1`–`1024`, and the combined bitmap area
+must stay at or below `16_000_000` cells. Scaling expands the bitmap and SVG viewBox; SVG display size is controlled by its container.
+
+Adjust scale for different display contexts while preserving the quiet zone:
 
 ```typescript
+import encode_qr from 'bun-qr';
+import { encode_url } from 'bun-qr/links';
+
+const url = encode_url('example.com');
+
 // Large print display
 const print_qr = encode_qr(url, 'svg', {
-  border: 4, // Larger quiet zone
+  border: 4, // Four-module quiet zone
   scale: 10 // Bigger modules
 });
 
 // Small mobile display
 const mobile_qr = encode_qr(url, 'svg', {
-  border: 2, // Standard quiet zone
+  border: 4, // Preserve the four-module quiet zone
   scale: 4 // Smaller modules
 });
 ```
@@ -298,14 +344,17 @@ Generated QR codes will be saved in `examples/output/`.
 
 ## Validation
 
-All encoding functions include validation:
+All helpers validate selected fields at runtime and throw for documented invalid inputs.
+TypeScript also catches missing required fields before execution:
 
 ```typescript
+import { encode_email, encode_geo, encode_phone, encode_wifi } from 'bun-qr/links';
+
 // These will throw errors:
 encode_email('invalid-email'); // Invalid email format
 encode_phone('abc'); // Invalid phone number
 encode_geo({ latitude: 100, longitude: 0 }); // Invalid coordinates
-encode_wifi({}); // Missing required ssid
+encode_wifi({ ssid: '' }); // Empty required ssid
 ```
 
 ## TypeScript Support
@@ -318,18 +367,16 @@ import type { CalendarEventOptions, EmailOptions, GeoOptions, SmsOptions, UrlOpt
 
 ## Compatibility
 
-These encoding formats follow standard conventions and work with:
+Scanner support depends on the device, app, and payload type. Test with the intended receiver; no device/app
+compatibility matrix is currently maintained. QR payload and GIF pixel tests use independent development-only decoders.
+Those tests do not prove that a camera imports a contact, opens a calendar fragment, joins WiFi, or accepts a payment.
 
-- iOS Camera app
-- Android Camera app
-- QR code scanner apps
-- WhatsApp, WeChat, and other messaging apps
-- Payment apps (for Bitcoin)
-- Contact management apps (for vCard)
+Current limitations include geo uncertainty/exponent serialization, controls in vCard/calendar free text,
+and the two-module default QR border. The decoder and browser scaffolds are excluded from the published package.
 
 ## Further Reading
 
 - [QR Code Data Formats](https://github.com/zxing/zxing/wiki/Barcode-Contents)
-- [vCard Format Specification](https://en.wikipedia.org/wiki/VCard)
+- [vCard Format Specification (RFC 6350)](https://www.rfc-editor.org/rfc/rfc6350.html)
 - [WiFi QR Code Format](https://github.com/zxing/zxing/wiki/Barcode-Contents#wi-fi-network-config-android-ios-11)
-- [Geo URI Scheme](https://en.wikipedia.org/wiki/Geo_URI_scheme)
+- [Geo URI Scheme (RFC 5870)](https://www.rfc-editor.org/rfc/rfc5870.html)

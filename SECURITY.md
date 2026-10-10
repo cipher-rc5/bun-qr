@@ -2,13 +2,24 @@
 
 ## Scope
 
-**bun-qr** is a QR code encoding library. It accepts arbitrary user input (URLs, WiFi credentials, vCard data, plain text) and encodes it into QR image formats. The library does not make network requests, access the filesystem, execute user input, or connect to external services.
+**bun-qr** is a Bun-only QR code encoder and CLI. The encoder and link helpers format caller-supplied data
+(URLs, WiFi credentials, vCard data, plain text) without built-in network or filesystem access.
+The CLI writes output files and creates parent directories; without `--force`, destination creation is exclusive
+and refuses existing files or links. Development and release tooling installs packages and communicates with registries and GitHub.
+
+A custom `text_encoder` is caller-provided code that receives raw input. Keep it a pure byte conversion.
+The general encoder accepts arbitrary text; HTTP/HTTPS restrictions apply to the URL helper and CLI, rather than all QR payloads.
+Helper validation does not establish that a URL, WiFi network, contact, or payment recipient is trustworthy.
+vCard/calendar free-text validation and geo serialization have current limits documented in
+[LINK_ENCODING.md](docs/LINK_ENCODING.md). Consumers should validate fields for their receiving application.
 
 Security issues relevant to this library include:
 
 - Input validation bypasses that allow malicious payloads to be embedded silently
 - Memory exhaustion via unbounded output sizes
 - Denial-of-service vectors in the encoding pipeline
+- CLI overwrite-protection bypasses and unsafe output path handling
+- Package, toolchain, or release-artifact integrity failures
 
 ## Supported Versions
 

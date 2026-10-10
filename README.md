@@ -2,11 +2,11 @@
 
 Forked from [paulmillr/qr](https://github.com/paulmillr/qr) by [paulmillr](https://github.com/paulmillr), and distributed under the same dual `MIT OR Apache-2.0` terms.
 
-QR code generator built using the bun runtime. Zero dependencies, strict TypeScript, with multiple output formats, CLI support, and built-in link encoding utilities. This project is a fork of paulmillr's `qr`, retargeted at the Bun runtime and toolchain, with a snake_case API, a Bun-native CLI, and link encoding helpers added.
+QR code generator for Bun with zero runtime dependencies, strict TypeScript, multiple output formats, a CLI, and link encoding utilities. This project is a fork of paulmillr's `qr`, retargeted at the Bun runtime and toolchain, with a snake_case API and link encoding helpers added.
 
 ## Features
 
-- Zero dependencies
+- Zero runtime dependencies; development tools and test decoders are development dependencies
 - Built for Bun runtime, APIs, and package manager
 - Strict type-safe TypeScript configuration
 - QR code generation (encoding)
@@ -14,9 +14,9 @@ QR code generator built using the bun runtime. Zero dependencies, strict TypeScr
 - Bun-native terminal colorization with `Bun.color()`
 - **Link & data encoding utilities** for URLs, emails, WiFi, vCards, and more
 - Multiple output formats: ASCII, Terminal, SVG, GIF, Raw
-- Snake_case API for Rust compatibility
+- Snake_case public encoder and link APIs
 - Comprehensive error correction support
-- Encoding verified against ISO/IEC 18004 by an independent spec oracle, not just golden hashes
+- Independent QR structural tests, QR payload decoding, and GIF pixel decoding
 - CI with format check, lint, typecheck, declaration build, packaged-import check, and coverage
 
 ## Installation
@@ -24,8 +24,7 @@ QR code generator built using the bun runtime. Zero dependencies, strict TypeScr
 ### As a dependency
 
 > **Not yet published.** `bun-qr` has not been released to npm, so the command below will
-> not resolve yet. Until the first release, install from source or from a git reference:
-> `bun add github:cipher-rc5/bun-qr`.
+> not resolve yet. Until the first release, use a source checkout or a locally built tarball as shown below.
 
 ```bash
 bun add bun-qr
@@ -40,14 +39,27 @@ The package ships TypeScript sources and is resolved through the `bun` export co
 
 Bun 1.4.2 or newer is required; Node.js is not a supported runtime. Package exports resolve only for Bun, and both public entry points check for Bun at startup.
 Development scripts force JavaScript tool wrappers to run with Bun, including tools with a Node.js shebang.
+Utility scripts and the benchmark use Bun APIs and Bun Shell without Node imports or globals; Biome enforces this.
+CLI internals and some test fixtures use Bun's Node-compatible APIs for atomic file creation, terminal streams, and exit codes.
+Dependency lifecycle scripts are disabled in `bunfig.toml`; third-party GitHub Actions use GitHub-managed runtimes.
 
 ### From source
 
 ```bash
 git clone https://github.com/cipher-rc5/bun-qr.git
 cd bun-qr
-bun install
+bun install --frozen-lockfile
 ```
+
+Git source installs do not include generated declarations. To install the complete package into another project,
+build and pack from this checkout:
+
+```bash
+bun run build
+bun pm pack --ignore-scripts --destination dist-artifacts
+```
+
+Then run `bun add /absolute/path/to/bun-qr/dist-artifacts/bun-qr-0.2.0.tgz` in the consuming project.
 
 ## CLI
 
@@ -71,7 +83,7 @@ bunx --bun bun-qr https://bun.com --format svg --output bun.svg
 | Flag                                   | Description                                    |
 | -------------------------------------- | ---------------------------------------------- |
 | `-f, --format <svg\|gif\|ascii\|term>` | Output format (default: `svg`)                 |
-| `-o, --output <path>`                  | Output file for `svg`/`gif` formats            |
+| `-o, --output <path>`                  | Write any output format to a file              |
 | `-s, --size <pixels>`                  | Output size in pixels, `1`–`4000` (svg only)   |
 | `-F, --force`                          | Overwrite the output file if it already exists |
 | `-h, --help`                           | Show help                                      |
@@ -79,18 +91,22 @@ bunx --bun bun-qr https://bun.com --format svg --output bun.svg
 
 Behaviour notes:
 
-- Unknown options are rejected rather than ignored; a missing `<url>` argument exits non-zero with a usage error.
-- `--size` applies to SVG output only, and is bounded by the `MAX_QR_PIXELS` raster guard (4000 x 4000).
+- `--help` exits `0`; a missing `<url>` exits `2`; other parsing, encoding, and filesystem errors exit `1`.
+- Unknown options are rejected. Only the first positional URL is used.
+- `--size` sets SVG `width` and `height` attributes, with a CLI limit of `1`–`4000`. Other formats ignore it with a warning.
+- SVG and GIF default to `qr-code.svg` and `qr-code.gif`. ASCII and terminal output go to stdout unless `--output` is supplied.
 - Without `--force`, the CLI refuses to overwrite an existing output file.
 - Creation is exclusive and atomic across competing writers; filename characters such as `#` and `%` are treated literally.
 - Status and error messages go to stderr, so `stdout` stays clean for piping `ascii`/`term` output.
 - Presenter colorization uses `Bun.color()` and checks each stream's TTY independently. The `term` renderer itself emits ANSI artwork; use `ascii` for plain text.
 - URLs are auto-normalized by adding `https://` when the scheme is missing.
+- Only HTTP/HTTPS URLs are accepted. `localhost:port` and dotted-hostname ports support shorthand; other single-label hosts with ports need an explicit scheme.
+- The CLI uses the encoder's current two-module border. Use the library API with `border: 4` for a four-module quiet zone.
 
 ## Development
 
 ```bash
-bun install
+bun install --frozen-lockfile
 bun run lint
 bun run typecheck
 bun test
@@ -108,7 +124,13 @@ bun run bench
 
 A [`justfile`](justfile) wraps the same commands: `just` (typecheck + test), `just ci`
 (toolchain, audit, formatting, lint, types, build, package verification and coverage), plus individual task recipes.
-GitHub also uploads coverage and benchmark artifacts. dprint is exact-pinned, and installation leaves source untouched.
+GitHub uploads benchmark artifacts and prints coverage in the test logs. See the coverage upload limitation below.
+dprint and its plugins are exact-pinned; installation leaves source untouched. See [CONTRIBUTING.md](CONTRIBUTING.md) for all checks.
+
+### Pushing
+
+Name the destination branch explicitly: `git push origin HEAD:<branch>`. Use the branch name reported by
+`git branch --show-current`; add `-u` when setting its upstream for the first time.
 
 ## Architecture
 
@@ -121,7 +143,9 @@ The core encoder has been separated by concern (SOLID-oriented modules):
 - `src/core/penalty.ts`: mask penalty scoring
 - `src/core/tables.ts`: capacity and ECC lookup tables (ISO/IEC 18004 Annex I)
 - `src/core/utils.ts`: shared helpers (`bin`, `fill_arr`, `best`, `alphabet`)
+- `src/core/url.ts`: shared HTTP/HTTPS scheme policy and host/port detection
 - `src/index.ts`: public API facade and orchestration
+- `src/runtime.ts`: Bun requirement shared by the public entry points
 
 ## Fixtures, Tests, and Benchmarks
 
@@ -131,7 +155,8 @@ The core encoder has been separated by concern (SOLID-oriented modules):
 - `tests/interop.test.ts` independently decodes QR payloads across every version, mode/ECC boundaries and all masks with jsQR, and GIF pixels with gifuct-js; both are development-only dependencies
 - `tests/cli.io.test.ts` exercises exclusive writes, competing writers, terminal presentation and the executable CLI
 - `tests/api.types.ts` checks public overloads during typechecking; package verification additionally checks emitted consumer declarations
-- `tests/core/bitmap.test.ts` covers the four renderers, the geometry primitives, and the `MAX_QR_PIXELS` guard
+- `tests/core/bitmap.test.ts` covers bitmap renderers, geometry, and the `MAX_QR_PIXELS` allocation guard
+- `tests/runtime.test.ts`, `tests/toolchain.test.ts`, and `tests/scripts.test.ts` cover Bun execution, version policy, and temporary-directory safety
 - Link fixture tests validate canonical URL/email/WiFi encodings
 - Benchmarks are defined in `tests/benchmark.ts` and run with `bun run bench`
 - Benchmarks record Bun/platform metadata, warmups and five measured batches, including near-capacity and scaled-image cases
@@ -143,12 +168,17 @@ The core encoder has been separated by concern (SOLID-oriented modules):
 - `bun install --frozen-lockfile`
 - toolchain pins and supported minimum verified by the prerequisite `version-pin` job
 - `bun audit --audit-level=high`
-- `bunx --bun dprint check` (format check)
+- `bun run fmt:check` (dprint format check)
 - `bun run lint` (Biome lint check; warnings fail the check)
 - `bun run typecheck`
 - `bun run build` (declaration emit) and verification that `types/index.d.ts` and `types/links.d.ts` exist
-- packs the tarball and verifies it imports cleanly from a fresh Bun consumer (both `bun-qr` and `bun-qr/links`)
-- `bun test --coverage`, uploading the `coverage/` directory as an artifact
+- `bun run verify:package`, checking packed imports and consumer types for both public entry points
+- `bun test --coverage`, printing a coverage summary
+
+The workflow has an upload step targeting `coverage/`, but no file coverage reporter is configured.
+The current test command produces console output rather than an uploadable coverage file.
+To generate a local file report, use `bun test --coverage --coverage-reporter=lcov` as described in
+[Bun's coverage documentation](https://bun.com/docs/test/code-coverage).
 
 A second `benchmark` job runs only on `main`; it executes `bun run bench` and uploads the results as an artifact.
 
@@ -169,16 +199,16 @@ const text = 'Hello, World!';
 const ascii = encode_qr(text, 'ascii');
 console.log(ascii);
 
-// Terminal-friendly (2x larger, all fonts work)
+// Terminal-friendly (two character cells per module, emits ANSI colors)
 const term = encode_qr(text, 'term');
 console.log(term);
 
 // SVG vector image
-const svg = encode_qr(text, 'svg');
+const svg = encode_qr(text, 'svg', { border: 4 });
 await Bun.write('qr.svg', svg);
 
 // GIF image (LZW-compressed, 2-color palette)
-const gif = encode_qr(text, 'gif');
+const gif = encode_qr(text, 'gif', { border: 4 });
 await Bun.write('qr.gif', gif);
 
 // Raw 2D boolean array
@@ -232,7 +262,7 @@ const geo_qr = encode_qr(location, 'svg');
 - **vCard**: Complete contact information
 - **WiFi**: Network credentials (WPA/WEP/open)
 - **Geographic**: Latitude/longitude coordinates
-- **Calendar Events**: iCalendar format events
+- **Calendar Events**: VEVENT fragments, rather than complete `.ics` files
 - **WhatsApp**: Direct messages
 - **Bitcoin**: Payment requests
 
@@ -251,23 +281,40 @@ If you need to read QR codes today, use a dedicated decoder library.
 
 ## API
 
-### `encode_qr(text, output, options?)`
+### `encode_qr(text, output?, options?)`
 
 Generate a QR code.
 
 **Parameters:**
 
 - `text`: String to encode
-- `output`: Output format ('raw' | 'ascii' | 'term' | 'svg' | 'gif')
+- `output`: Output format ('raw' | 'ascii' | 'term' | 'svg' | 'gif'), default `'raw'`
 - `options`: Optional configuration object
-  - `ecc`: Error correction level ('low' | 'medium' | 'quartile' | 'high')
-  - `encoding`: Encoding type ('numeric' | 'alphanumeric' | 'byte')
-  - `version`: QR version (1-40)
-  - `mask`: Mask pattern (0-7)
-  - `border`: Border size in modules (default: 2)
-  - `scale`: Scale factor (default: 1)
+  - `ecc`: Error correction level ('low' | 'medium' | 'quartile' | 'high'), default `'medium'`
+  - `encoding`: Supported mode ('numeric' | 'alphanumeric' | 'byte'), automatically detected when omitted
+  - `version`: Integer QR version `1`–`40`; the smallest fitting version is selected when omitted
+  - `mask`: Integer pattern `0`–`7`; the lowest-penalty mask is selected when omitted
+  - `border`: Integer border width in modules, `0`–`1024` (default: `2`)
+  - `scale`: Integer module scale, `1`–`1024` (default: `1`)
   - `optimize`: For SVG, use optimized path (default: true)
   - `text_encoder`: Custom string-to-bytes encoder, `(text: string) => Uint8Array` (default: UTF-8 via `TextEncoder`)
+
+| Output                       | Return type                           |
+| ---------------------------- | ------------------------------------- |
+| omitted or `'raw'`           | `boolean[][]` (`true` is dark)        |
+| `'ascii'`, `'term'`, `'svg'` | `string`                              |
+| `'gif'`                      | `Uint8Array`                          |
+| dynamic `Output` value       | `boolean[][] \| string \| Uint8Array` |
+
+To provide options with the default output, call `encode_qr(text, undefined, options)`.
+The scaled bitmap area is limited to `16_000_000` cells for every output format; valid individual option values
+can still exceed this combined limit. SVG output has a `viewBox` but no explicit display dimensions; `scale`
+expands its geometry, while display size is controlled by the embedding page or the CLI's `--size`.
+This output limit does not bound input processing or custom encoder allocations; set input-size limits when handling untrusted payloads.
+
+The default border is two modules. Set `border: 4` for the four-module quiet zone described by
+[DENSO WAVE](https://www.qrcode.com/en/howto/code.html); smaller borders need additional surrounding space.
+`kanji` and `eci` appear in the exported mode tuple/type but are rejected by the encoder.
 
 #### `text_encoder`
 
@@ -275,6 +322,8 @@ Overrides how `text` is converted to bytes in `byte` encoding mode — useful fo
 target charsets such as Shift_JIS or ISO-8859-1.
 
 ```typescript
+import encode_qr from 'bun-qr';
+
 const latin1 = (text: string) => Uint8Array.from(text, (ch) => ch.charCodeAt(0) & 0xff);
 const svg = encode_qr('café', 'svg', { encoding: 'byte', text_encoder: latin1 });
 ```
@@ -285,6 +334,8 @@ const svg = encode_qr('café', 'svg', { encoding: 'byte', text_encoder: latin1 }
 > version can hold causes encoding to fail rather than silently truncate.
 
 Byte-mode encoding invokes this callback once per QR generation and reuses the measured bytes for the payload.
+Numeric and alphanumeric modes do not invoke it. The callback changes payload bytes without adding an ECI designator;
+configure the receiving decoder's charset when using a custom encoding.
 
 ### Other Exports
 
@@ -292,15 +343,19 @@ Also available from `bun-qr`:
 
 - **`validate_version(n)`**: Validate an integer in `[1, 40]` and return it as a branded
   `Version`. This is the only supported way to construct a `Version` — do not cast.
-  Throws if `n` is out of range.
+  Throws unless `n` is a safe integer in that range.
 - **`utf8_to_bytes(text)`**: The default `text_encoder` — UTF-8 encoding via `TextEncoder`.
 - **`EC_MODE`**: Readonly tuple of the four error-correction levels.
-- **`ENCODING`**: Readonly tuple of the encoding-mode names.
+- **`ENCODING`**: Readonly tuple `['numeric', 'alphanumeric', 'byte', 'kanji', 'eci']`; the last two modes are not implemented.
+- **Types**: `Version`, `Mask`, `ErrorCorrection`, `EncodingType`, `QrOpts`, `SvgQrOpts`, `Output`, `Image`, `Point`, and `Size`.
 
 And from `bun-qr/links`:
 
-- **`validate_url(url)`**: Returns whether a URL is well-formed and uses a permitted scheme.
-- **`SAFE_URL_SCHEMES`**: The scheme allowlist (`http:`, `https:`) enforced by `encode_url`.
+- **`validate_url(url)`**: Checks URL parsing and HTTP/HTTPS only; it does not apply `encode_url`'s control-character check.
+- **`SAFE_URL_SCHEMES`**: Informational `ReadonlySet` of `http:` and `https:`. Changing the underlying set does not configure the internal scheme policy.
+- **`WIFI_SECURITY_TYPES`**: Readonly tuple `['WPA', 'WEP', 'nopass']` used for runtime WiFi security validation.
+- **Types**: `UrlOptions`, `EmailOptions`, `SmsOptions`, `VCardOptions`, `WifiOptions`, `GeoOptions`, and `CalendarEventOptions`.
+- **Default export**: Object containing the ten `encode_*` link helpers.
 
 > `utils` and `_tests` are also exported but are **internal and outside semantic
 > versioning**. Their shapes track the encoder's implementation and may change in any
@@ -310,12 +365,10 @@ And from `bun-qr/links`:
 
 All link encoding functions are available from `bun-qr/links`:
 
-> **Handling untrusted input:** these functions escape and validate their fields so that
-> attacker-controlled values cannot inject extra records into the encoded payload — a
-> `;` in a WiFi SSID or a `\r\n` in a vCard field is escaped, not passed through. Invalid
-> values (a malformed coordinate, a non-finite number, an unrecognised WiFi security mode)
-> throw rather than producing a silently wrong QR code. Handle those errors; do not assume
-> every input yields a payload.
+> **Handling untrusted input:** helpers validate their documented fields and escape delimiters, including WiFi
+> separators and vCard/calendar line breaks. This is not a complete sanitizer: vCard/calendar free-text fields
+> do not reject every ASCII control character, and geo serialization has known format limitations.
+> Validate input for the receiving application and handle errors. Details are in [LINK_ENCODING.md](docs/LINK_ENCODING.md).
 
 - **`encode_url(url, options?)`**: Format and validate URLs
   - `auto_protocol`: Add `https://` if missing (default: true)
@@ -328,16 +381,20 @@ All link encoding functions are available from `bun-qr/links`:
 - **`encode_sms(phone, options?)`**: Create SMS links with optional body
 
 - **`encode_vcard(options)`**: Generate vCard contact information
-  - `first_name`, `last_name`, `organization`, `title`, `phone`, `email`, `url`, `address`, `note`
+  - `formatted_name`, `first_name`, `last_name`, `organization`, `title`, `phone`, `email`, `url`, `address`, `note`
+  - A display name is required, directly or derived from personal names or organization
 
 - **`encode_wifi(options)`**: WiFi network configuration
   - `ssid` (required), `password`, `security` (WPA/WEP/nopass), `hidden`
+  - Defaults: empty password, `security: 'WPA'`, `hidden: false`
 
 - **`encode_geo(options)`**: Geographic coordinates
   - `latitude`, `longitude`, `altitude`, `uncertainty`
+  - Current uncertainty serialization uses `?u=`; strict RFC 5870 serialization is not implemented
 
 - **`encode_calendar_event(options)`**: iCalendar events
   - `title`, `start`, `end`, `location`, `description`, `all_day`
+  - Emits a VEVENT fragment; dates use UTC and `all_day` defaults to `false`
 
 - **`encode_whatsapp(phone, message?)`**: WhatsApp direct messages
 
@@ -346,12 +403,10 @@ All link encoding functions are available from `bun-qr/links`:
 
 ## Performance
 
-Built specifically for Bun's high-performance JavaScript runtime, this library leverages:
-
-- Native Bun APIs for file I/O
-- Optimized TypeScript compilation
-- Zero-dependency architecture
-- Efficient memory management
+Run `bun run bench` for measurements on your machine. The suite records Bun and host metadata,
+performs ten warmups, and measures five batches for each of eight cases. It reports aggregate throughput,
+median batch duration, and range; these are measurements rather than latency guarantees.
+Bun executes TypeScript sources directly; `bun run build` emits declarations only.
 
 ## License
 

@@ -1,5 +1,7 @@
 # Verifying a release
 
+The package is currently unpublished. This document describes verification of artifacts produced by the configured release workflow.
+
 The release workflow uses Bun 1.4.2, enforces the supported toolchain and local validation gates,
 and checks the tag against `package.json`. It packs once and verifies the resulting archive's public imports
 and TypeScript declarations from a clean consumer. It generates SHA-256 checksums and a CycloneDX SBOM,
@@ -7,8 +9,9 @@ then uses the immutable-pinned [GitHub attestation action](https://github.com/ac
 to create signed SLSA build provenance for that archive. Bun publishes the same archive bytes.
 
 GitHub Releases include the tarball, `SHA256SUMS.txt`, `sbom.cdx.json`, and `provenance.sigstore.json`.
-The SBOM inventories development/build dependencies and labels them separately from shipped runtime dependencies
-(there are none). The attestation is GitHub/Sigstore provenance; it does not claim npm registry provenance.
+The SBOM inventories development/build dependencies: direct development dependencies are marked `optional`,
+transitive tooling `excluded`, and none are shipped runtime dependencies. `SHA256SUMS.txt` covers the tarball,
+rather than the SBOM or provenance bundle. The attestation is GitHub/Sigstore provenance; it does not claim npm registry provenance.
 
 After downloading these files from the same release, check their contents with:
 
@@ -27,6 +30,7 @@ The [GitHub CLI verification reference](https://cli.github.com/manual/gh_attesta
 The package can also be checked locally from a repository checkout with built declarations and development tools:
 
 ```sh
+bun install --frozen-lockfile
 bun run build
 bun run verify:package /absolute/path/to/bun-qr-0.2.0.tgz
 ```
@@ -39,3 +43,5 @@ This integration is exercised by the tag-triggered release job, not by local tes
 first released archive with the commands above and confirm its attestation appears in the repository's attestations API.
 Release execution also requires the configured registry token. Local success does not prove remote credentials,
 branch protection or release execution status.
+Third-party Actions execute with GitHub-managed runtimes. Project-authored JavaScript/TypeScript runs with Bun;
+publishing uses `bun publish` and GitHub Release creation uses `gh release create`.

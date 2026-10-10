@@ -65,14 +65,17 @@ Run it before opening a pull request. The individual steps:
 | Clean artifacts  | `just clean`            | `rm -rf types dist coverage`                   |
 
 Running `just` with no arguments runs `typecheck` and `test`.
-GitHub additionally uploads coverage and benchmark artifacts. Release jobs check the tag/version match,
+GitHub prints coverage in the test logs and uploads benchmark artifacts. The configured coverage upload targets
+`coverage/`, but the current text reporter does not generate a file there. Release jobs check the tag/version match,
 generate checksums and an SBOM, attest the tarball, then publish those same verified bytes.
 
 ## Formatting
 
 Formatting is handled by **[dprint](https://dprint.dev)**, configured in `dprint.json`. It covers TypeScript,
 JSON, Markdown, TOML, and YAML.
-The CLI is an exact-pinned development dependency. Installation does not format or modify source; run formatting explicitly.
+The CLI is an exact-pinned development dependency. Its plugins are pinned `npm:` references in `dprint.json`;
+these identify registry packages and do not require the npm CLI. Installation does not format or modify source; run formatting explicitly.
+The JSON plugin also sorts `package.json` keys, so plugin upgrades can produce formatting-only manifest changes.
 
 Do not hand-format code or argue with the formatter — run `just fmt` (`bunx --bun dprint fmt`) and commit the result.
 CI runs `bunx --bun dprint check` and fails on any difference. `.editorconfig` mirrors `dprint.json` so your editor
@@ -96,7 +99,8 @@ Tests use Bun's built-in test runner (`bun test`) and live in `tests/`.
 ```sh
 bun test                          # everything
 bun test tests/links.test.ts      # a single file
-bun test --coverage               # with a coverage report
+bun test --coverage               # console coverage summary
+bun test --coverage --coverage-reporter=lcov  # coverage/lcov.info
 ```
 
 Please add tests for any behavior change. This is an encoding library, so the most valuable tests pin down exact
@@ -115,6 +119,8 @@ catching broken `exports` maps and missing files. CI runs the same script on eve
 exact tarball that will be attested and published. Use `bun run verify:package path/to/package.tgz` to check an existing archive.
 Run it locally if you touch
 `package.json`'s `exports`, `files`, or entry points.
+The direct verification script requires declarations to have been built first and uses an offline temporary consumer.
+It runs the same Bun executable as its parent, skips install scripts, and removes its temporary directory on completion or failure.
 
 ## Pull requests
 
@@ -135,7 +141,7 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 you believe a change genuinely requires a runtime dependency, open an issue first so it can be discussed before
 you write the code.
 
-Development dependencies are exact-pinned, and GitHub Actions are pinned to immutable commit SHAs. Dependabot
+Development dependencies and formatter plugin references are exact-pinned, and GitHub Actions are pinned to immutable commit SHAs. Dependabot
 proposes upgrades weekly; please keep new pins exact and, for actions, keep the SHA plus its `# v4`-style version
 comment.
 

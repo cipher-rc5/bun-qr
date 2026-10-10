@@ -31,12 +31,11 @@ trim_trailing_whitespace = false
 [*.toml]
 max_line_length = 120
 
-# Formatted by the dprint pretty_yaml plugin.
+# Formatted by the pinned dprint-plugin-yaml plugin.
 [*.{yml,yaml}]
 indent_size = 2
 
-# Single-value pin files; a stray blank line or CRLF would break the
-# .bun-version check in ci.yml.
+# Single-value runtime pin, read and trimmed by scripts/verify-toolchain.ts.
 [.bun-version]
 insert_final_newline = true
 

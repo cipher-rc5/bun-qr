@@ -19,7 +19,7 @@
 - [ ] `just ci` passes locally (toolchain, audit, format, lint, typecheck, build, package verification, coverage)
 - [ ] Formatting applied with `just fmt` (`bunx --bun dprint fmt`)
 - [ ] Tests added or updated for the behavior change
-- [ ] No new runtime dependency (this project is deliberately zero-dependency)
+- [ ] No new runtime dependency (this project deliberately has zero runtime dependencies)
 - [ ] `just verify-package` passes, if `exports`, `files`, or entry points changed
 
 ## Encoding output

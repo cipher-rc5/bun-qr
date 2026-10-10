@@ -9,7 +9,7 @@ type ReadFn = (c: Point, curr: DrawValue) => void;
 const ch_codes = { newline: 10, reset: 27 };
 
 /**
- * Maximum pixel area (width × height) for raster output methods (to_gif, to_image).
+ * Maximum bitmap area (width × height), checked before allocation and by raster output methods.
  * Guards against excessive memory allocation from large version + scale combinations.
  * At scale 1, version 40 QR codes are 177×177 = 31,329 pixels — well within this limit.
  */
@@ -283,9 +283,8 @@ export class Bitmap {
    *
    * The bounds check happens here rather than being left to the constructor because the
    * quiet-zone rows are materialised before the new Bitmap is built: an unchecked border
-   * commits the whole allocation inside this method. It is also the only memory guard on
-   * the `raw`, `ascii`, `term`, and `svg` paths — `MAX_QR_PIXELS` otherwise applies only
-   * in `to_gif`/`to_image` — so validating here protects every output format, and direct
+   * commits the whole allocation inside this method. The same area limit applies to
+   * constructor and scale allocations, protecting every output format and direct
    * `Bitmap` users, regardless of what the caller checked.
    */
   border(border = 2, value: DrawValue): Bitmap {
