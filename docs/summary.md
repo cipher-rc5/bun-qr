@@ -10,6 +10,7 @@
 - Decoder (`src/decode.ts`): scaffolded, not implemented yet
 - DOM helpers (`src/dom.ts`): scaffolded for future browser scanning support
 - Runtime/package manager/tooling: Bun only
+- Supported platforms: Linux and macOS; Windows is currently unsupported and excluded from CI
 - Utility scripts and benchmark: Bun APIs/Bun Shell; Biome rejects Node imports/globals in these files
 - CLI and test internals: selected Node-compatible APIs provided by Bun; third-party Actions use GitHub-managed runtimes
 - Licensing: dual `MIT OR Apache-2.0`, inherited from the upstream `paulmillr/qr` fork;

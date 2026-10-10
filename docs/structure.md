@@ -127,6 +127,8 @@ bun-qr/
 
 `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests.
 
+The test matrix covers Ubuntu and macOS. Windows is currently unsupported and excluded from CI.
+
 The prerequisite `version-pin` job checks the executing runtime, engine minimum, development and workflow pins, and test matrix. The `test` job installs with the frozen lockfile, audits dependencies, checks dprint and Biome, typechecks and builds declarations, verifies packed consumer imports and types, then prints coverage. Its upload step targets `coverage/`, but no file reporter is configured, so the current command produces no coverage artifact.
 
 The `benchmark` job runs only on `main`, uploading the measurement output. Releases re-run the validation gates, verify the tag/version match and exact package archive, generate checksums and an SBOM, attest the tarball with GitHub/Sigstore and publish that same archive. See [release verification](RELEASE_VERIFICATION.md).

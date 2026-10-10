@@ -5,6 +5,7 @@ tested — nothing here is aspirational.
 
 ## Prerequisites
 
+- **Linux or macOS** — Windows is currently unsupported and is excluded from CI.
 - **[Bun](https://bun.com)** — this project uses Bun as both the runtime and the package manager. Never use
   `npm`, `yarn`, or `pnpm`; the lockfile is `bun.lock`.
 - **[just](https://github.com/casey/just)** (optional) — a command runner. Every recipe in the `justfile` is a
@@ -129,7 +130,7 @@ It runs the same Bun executable as its parent, skips install scripts, and remove
 3. Run `just ci` and make sure it passes.
 4. Open a pull request describing what changed and why.
 
-CI runs on every pull request across Ubuntu, macOS, and Windows at the supported minimum and development pin. All of it must
+CI runs on every pull request across Ubuntu and macOS at the supported minimum and development pin. All of it must
 be green before merge.
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`, `fix:`, `docs:`,

@@ -21,6 +21,8 @@ QR code generator for Bun with zero runtime dependencies, strict TypeScript, mul
 
 ## Installation
 
+Supported platforms are Linux and macOS. Windows is currently unsupported and is excluded from CI.
+
 ### As a dependency
 
 > **Not yet published.** `bun-qr` has not been released to npm, so the command below will
@@ -163,7 +165,8 @@ The core encoder has been separated by concern (SOLID-oriented modules):
 
 ## CI
 
-`.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. The `test` job:
+`.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. The `test` job runs on
+Ubuntu and macOS; Windows is currently unsupported. It checks:
 
 - `bun install --frozen-lockfile`
 - toolchain pins and supported minimum verified by the prerequisite `version-pin` job

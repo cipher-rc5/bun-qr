@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- CI tests Linux and macOS only; Windows is currently unsupported. Installation and contributor documentation state this platform policy.
 - Package exports resolve only for Bun, and public entry points require the Bun runtime. Development commands force Bun for Node-shebang tool wrappers, and GitHub Release creation uses the native GitHub CLI instead of a Node-based script action.
 - Automatic dependency install scripts are disabled; precompiled development tools initialize through their Bun-executed wrappers.
 - Bun 1.4.2 is the supported minimum and development/CI/release pin; verification enforces the manifest, matrix and workflow pins together.

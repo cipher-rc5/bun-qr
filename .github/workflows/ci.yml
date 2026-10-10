@@ -52,8 +52,8 @@ jobs:
       fail-fast: false
       matrix:
         # Minimum and development pin currently coincide. The toolchain verifier
-        # requires both in this matrix if they diverge. File I/O is tested on all OSes.
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # requires both in this matrix if they diverge. Windows is currently unsupported.
+        os: [ubuntu-latest, macos-latest]
         bun: ["1.4.2"]
 
     steps:
@@ -87,8 +87,6 @@ jobs:
         run: bun run build
 
       - name: Verify build output
-        # `shell: bash` so `test -f` works identically on the Windows runner,
-        # where the default shell is PowerShell.
         shell: bash
         run: |
           test -f types/index.d.ts || (echo "types/index.d.ts not found" && exit 1)
