@@ -22,8 +22,8 @@
 // input string. Doing that honestly requires a full Reed-Solomon erasure decoder, and
 // implementing one *here* by copying the encoder's own GF tables would re-introduce exactly
 // the circularity this file exists to avoid. Instead we verify the symbol's structural and
-// format-information layers, which is where encoder bugs actually manifest, using arithmetic
-// that shares no code with `src/`.
+// format-information layers using arithmetic that shares no code with `src/`.
+// `interop.test.ts` independently decodes payloads with jsQR and image pixels with gifuct-js.
 
 import { describe, expect, test } from 'bun:test';
 import encode_qr, { type ErrorCorrection } from '../src/index';

@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { helpText, MissingUrlError, parseCliArgs } from './args-parser';
 import { BunQrGenerator } from './qr-generator';
 import { BunTerminalPresenter } from './terminal-presenter';
@@ -86,32 +88,22 @@ export class QrCliApplication {
   }
 
   private async writeArtifact(args: CliArgs, outputPath: string, output: string | Uint8Array): Promise<void> {
-    // Refuse to clobber existing files unless the user explicitly opted in with --force.
-    // The check runs against the resolved path: Bun.write resolves `..` and creates missing
-    // intermediate directories, but Bun.file(...).exists() on an unresolved traversing path
-    // reports false, which would let the guard be bypassed.
-    if (!args.force && await Bun.file(this.resolvePath(outputPath)).exists()) {
-      throw new Error(
-        `Refusing to overwrite existing file: ${outputPath}. Pass --force (-F) to overwrite it, or choose a different --output path.`
-      );
-    }
-
-    await Bun.write(outputPath, output);
-    this.presenter.printSuccess(`Saved QR file to ${outputPath}`);
-  }
-
-  /**
-   * Lexically resolve `.` and `..` against the cwd without touching the filesystem,
-   * so the overwrite guard sees the same file Bun.write would target.
-   */
-  private resolvePath(path: string): string {
+    const destination = resolve(outputPath);
+    await mkdir(dirname(destination), { recursive: true });
     try {
-      const base = Bun.pathToFileURL(`${process.cwd()}/`);
-      return Bun.fileURLToPath(new URL(path, base));
-    } catch {
-      // Fall back to the raw path if it is not URL-representable.
-      return path;
+      // O_EXCL makes checking and creating one operation, including for symlinks and
+      // competing processes. Filesystem paths must not be interpreted as URLs.
+      await writeFile(destination, output, { flag: args.force ? 'w' : 'wx' });
+    } catch (error: unknown) {
+      if (!args.force && error instanceof Error && 'code' in error && error.code === 'EEXIST') {
+        throw new Error(
+          `Refusing to overwrite existing file: ${outputPath}. Pass --force (-F) to overwrite it, or choose a different --output path.`,
+          { cause: error }
+        );
+      }
+      throw error;
     }
+    this.presenter.printSuccess(`Saved QR file to ${outputPath}`);
   }
 
   private errorMessage(error: unknown): string {

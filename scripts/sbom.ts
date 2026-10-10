@@ -74,7 +74,7 @@ function to_hashes(integrity: string | undefined): Array<{ alg: string, content:
   const alg = { sha256: 'SHA-256', sha384: 'SHA-384', sha512: 'SHA-512' }[algorithm];
   if (alg === undefined) return undefined;
   // CycloneDX expects hex; npm integrity strings are base64.
-  return [{ alg, content: Buffer.from(value, 'base64').toString('hex') }];
+  return [{ alg, content: Uint8Array.fromBase64(value).toHex() }];
 }
 
 const output_path = Bun.argv[2] ?? 'dist-artifacts/sbom.cdx.json';

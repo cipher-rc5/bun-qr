@@ -345,9 +345,9 @@ describe('to_string / to_ascii / to_term', () => {
   test('to_term emits ANSI background pairs, two characters per module', () => {
     const out = Bitmap.from_string('X \n X').to_term();
     const esc = String.fromCharCode(27);
-    expect(out).toContain(esc + '[40m'); // dark
-    expect(out).toContain(esc + '[1;47m'); // light
-    expect(out).toContain(esc + '[0m'); // reset
+    expect(out).toContain(`${esc}[40m`); // dark
+    expect(out).toContain(`${esc}[1;47m`); // light
+    expect(out).toContain(`${esc}[0m`); // reset
     expect(out.split('\n').length).toBe(2);
   });
 });
@@ -462,8 +462,8 @@ describe('to_gif', () => {
     expect(out[8]! | (out[9]! << 8)).toBe(1200);
     expect(out[out.length - 1]).toBe(0x3b);
 
-    // Walk the sub-block chain to confirm the stream is well-formed end to end: a
-    // mishandled reset would desynchronise the bit packing and corrupt the lengths.
+    // Check the container envelope here. Independent pixel decoding, including
+    // width transitions and dictionary resets, is covered by interop.test.ts.
     const sep = out.indexOf(0x2c);
     expect(out[sep + 10]).toBe(0x02); // minimum LZW code size
     let i = sep + 11;

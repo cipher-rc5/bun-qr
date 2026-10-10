@@ -92,8 +92,9 @@ function lzw_encode_gif(pixels: readonly number[]): number[] {
       write_code(prefix);
       if (next_code < MAX_CODE) {
         dict[key] = next_code++;
-        // Increase code size before the next code overflows current bit width
-        if (next_code >= (1 << code_size) && code_size < 12) code_size++;
+        // The decoder learns entries one emitted code later than the encoder.
+        // Keep the old width through the threshold entry so both sides stay aligned.
+        if (next_code > (1 << code_size) && code_size < 12) code_size++;
       } else {
         // Table full: emit clear code and reset dictionary
         write_code(CLEAR_CODE);
@@ -370,9 +371,9 @@ export class Bitmap {
 
   to_term(): string {
     const cc = String.fromCharCode(ch_codes.reset);
-    const reset = cc + '[0m';
-    const white_bg = cc + '[1;47m  ' + reset;
-    const dark_bg = cc + '[40m  ' + reset;
+    const reset = `${cc}[0m`;
+    const white_bg = `${cc}[1;47m  ${reset}`;
+    const dark_bg = `${cc}[40m  ${reset}`;
     return this.data.map((i) => i.map((j) => (j ? dark_bg : white_bg)).join('')).join(String.fromCharCode(ch_codes.newline));
   }
 
@@ -489,7 +490,7 @@ export class Bitmap {
       const row = this.data[y];
       if (row === undefined) break;
       for (let x = 0;x < width;x++) {
-        const value = !!row[x] ? 0 : 255;
+        const value = row[x] ? 0 : 255;
         data[i++] = value;
         data[i++] = value;
         data[i++] = value;

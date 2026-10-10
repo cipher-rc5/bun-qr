@@ -3,7 +3,7 @@
 <!--
   This fence is intentionally ```text, not ```md. dprint's markdown formatter reflows
   the contents of a ```md fence, which mangles the ASCII tree (joining `|`- prefixed
-  lines onto the previous line). Keep it as `text` and re-run `bunx dprint fmt` after
+  lines onto the previous line). Keep it as `text` and re-run `bunx --bun dprint fmt` after
   editing to confirm it survives intact.
 -->
 
@@ -14,8 +14,10 @@ bun-qr/
 |  |- package.json           Bun scripts, bin, exports, license
 |  |- tsconfig.json          Strict TypeScript settings
 |  |- tsconfig.build.json    Declaration-only build config
+|  |- biome.json             Biome lint configuration
+|  |- bunfig.toml            Force Bun for script and dependency execution
 |  |- dprint.json            Formatter configuration
-|  |- justfile               Task recipes (mirrors CI)
+|  |- justfile               Local validation/task recipes
 |  |- .bun-version           Pinned Bun version
 |  `- bun.lock               Bun lockfile
 |
@@ -24,7 +26,7 @@ bun-qr/
 |  `- LICENSE-MIT            MIT (verbatim from upstream)
 |
 |- CI (.github/workflows/)
-|  |- ci.yml                 Format, typecheck, build, package check, coverage, benchmark
+|  |- ci.yml                 Toolchain, audit, format, lint, types, package check, coverage, benchmark
 |  `- release.yml            Tag-triggered npm publish + GitHub Release
 |
 |- Documentation
@@ -42,6 +44,7 @@ bun-qr/
 |  |- decode.ts              Decoder scaffold (throws; not implemented)
 |  |- dom.ts                 Browser utilities scaffold (pending)
 |  |- cli.ts                 Bun CLI entrypoint
+|  |- runtime.ts             Shared Bun runtime requirement
 |  |
 |  |- core/
 |  |  |- bitmap.ts           Bitmap model + output renderers
@@ -49,6 +52,7 @@ bun-qr/
 |  |  |- encoder.ts          Payload encoding pipeline
 |  |  |- error-correction.ts GF math + Reed-Solomon + interleave
 |  |  |- penalty.ts          Mask scoring
+|  |  |- url.ts              Shared URL scheme policy
 |  |  |- tables.ts           Capacity + ECC lookup tables
 |  |  `- utils.ts            Shared helpers
 |  |
@@ -61,12 +65,19 @@ bun-qr/
 |     `- url-normalizer.ts   Scheme normalization
 |
 |- Tests (tests/)
+|  |- interop.test.ts
+|  |- api.types.ts
+|  |- cli.io.test.ts
+|  |- links.regressions.test.ts
+|  |- toolchain.test.ts
+|  |- runtime.test.ts        Bun enforcement and dependency execution
 |  |- index.test.ts          Fixture-backed regression tests
 |  |- roundtrip.test.ts      ISO/IEC 18004 structural verification
 |  |- links.test.ts          Link encoding helpers
 |  |- cli.args.test.ts       CLI argument parser tests
 |  |- cli.app.test.ts        CLI orchestration tests
 |  |- benchmark.ts           Runtime benchmark suite
+|  |- scripts.test.ts        Bun-native script filesystem safety
 |  |
 |  |- core/
 |  |  |- bitmap.test.ts      Renderers, geometry, pixel guard
@@ -80,6 +91,12 @@ bun-qr/
 |     |- link-fixtures.json
 |     `- benchmark-fixtures.json
 |
+|- Scripts (scripts/)
+|  |- bun-utils.ts           Bun file paths and private temporary directories
+|  |- sbom.ts                CycloneDX build/dependency inventory
+|  |- verify-package.ts      Packed exports and consumer declarations
+|  `- verify-toolchain.ts    Engine, runtime, matrix and pins
+|
 `- Examples (examples/)
    |- basic.ts
    |- links.ts
@@ -92,6 +109,6 @@ bun-qr/
 - Typecheck: `bun run typecheck`
 - Test: `bun test`
 - Coverage: `bun test --coverage`
-- Format: `bunx dprint fmt`
+- Format: `bunx --bun dprint fmt`
 - Bench: `bun run bench`
 - CLI: `bun run qr -- https://bun.com --format svg --output bun.svg`

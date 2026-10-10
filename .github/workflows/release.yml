@@ -8,7 +8,7 @@ on:
 # Must match .bun-version and ci.yml. Enforced by the "Verify Bun version pin"
 # job in ci.yml, which checks this file too.
 env:
-  BUN_VERSION: "1.3.14"
+  BUN_VERSION: "1.4.2"
 
 # Never cancel a release mid-flight: an interrupted run can leave a published
 # npm version with no matching GitHub release and no uploaded artifacts.
@@ -23,6 +23,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      attestations: write
 
     steps:
       - name: Checkout
@@ -36,19 +37,25 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Re-run every gate CI enforces. A tag must not be able to publish
+      - name: Verify runtime, engine minimum, workflow pins and matrix
+        run: bun run verify:toolchain
+
+      # Re-run the validation gates CI enforces. A tag must not be able to publish
       # code that CI would have rejected.
       - name: Audit dependencies
         run: bun audit --audit-level=high
 
       - name: Format check
-        run: bunx dprint check
+        run: bun run fmt:check
+
+      - name: Lint
+        run: bun run lint
 
       - name: Typecheck
         run: bun run typecheck
 
       - name: Test
-        run: bun test
+        run: bun test --coverage
 
       - name: Build (declaration emit)
         run: bun run build
@@ -62,7 +69,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF#refs/tags/v}"
-          pkg=$(bun --print "require('./package.json').version")
+          pkg=$(bun --print "(await Bun.file('package.json').json()).version")
           if [ "$tag" != "$pkg" ]; then
             echo "Tag v$tag does not match package.json version $pkg"
             exit 1
@@ -104,49 +111,40 @@ jobs:
             console.log('SBOM OK: spec ' + b.specVersion + ', ' + b.components.length + ' components');
           "
 
-      # Published with `bun publish`, keeping the toolchain Bun-only end to end.
-      #
-      # This forgoes npm provenance attestation: `bun publish` has no --provenance
-      # flag as of Bun 1.3.14 (https://github.com/oven-sh/bun/issues/15601), and Bun
-      # silently ignores unknown flags rather than erroring, so passing it anyway
-      # would yield a green release with no attestation and no warning — worse than
-      # not claiming it. Integrity is instead evidenced by the SHA256SUMS.txt and
-      # SBOM attached to the GitHub Release, and by the gates re-run above. Switch to
-      # `bun publish --provenance` once Bun implements it.
-      #
-      # --ignore-scripts skips `prepublishOnly`, whose gates (fmt/typecheck/test/build)
-      # this job already ran explicitly above. The hook stays in package.json so a
-      # manual `bun publish` is still gated; there is no reason to pay for it twice.
-      # NPM_CONFIG_TOKEN is the variable `bun publish` reads; verified empirically
-      # against Bun 1.3.14 with an isolated HOME and no .npmrc — it is the only one
-      # that authenticates. BUN_AUTH_TOKEN is not consulted and was removed rather
-      # than kept as a decorative fallback.
+      - name: Verify the release tarball imports and consumer types
+        run: bun run verify:package dist-artifacts/*.tgz
+
+      - name: Attest release tarball provenance
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: "${{ github.workspace }}/dist-artifacts/*.tgz"
+          create-storage-record: false
+
+      - name: Preserve provenance bundle for consumers
+        env:
+          BUNDLE_PATH: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          test -s "$BUNDLE_PATH"
+          cp "$BUNDLE_PATH" dist-artifacts/provenance.sigstore.json
+
+      # Publish the exact verified and attested bytes, without repacking.
+      # Manual publishing uses prepublishOnly; all those gates ran above here.
+      # GitHub/Sigstore provenance is separate from npm registry provenance.
       - name: Publish to npm
-        run: bun publish --access public --tag latest --ignore-scripts
+        run: |
+          set -euo pipefail
+          tarballs=(dist-artifacts/*.tgz)
+          test "${#tarballs[@]}" -eq 1
+          bun publish "${tarballs[0]}" --access public --tag latest --ignore-scripts
         env:
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            const tag = context.ref.replace('refs/tags/', '');
-            const release = await github.rest.repos.createRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag_name: tag,
-              name: tag,
-              generate_release_notes: true
-            });
-            const dir = 'dist-artifacts';
-            for (const file of fs.readdirSync(dir)) {
-              await github.rest.repos.uploadReleaseAsset({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: release.data.id,
-                name: file,
-                data: fs.readFileSync(path.join(dir, file))
-              });
-            }
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" dist-artifacts/* \
+            --verify-tag --title "$RELEASE_TAG" --generate-notes

@@ -65,7 +65,7 @@ const contact_vcard = encode_vcard({
   address: { street: '123 Main Street', city: 'San Francisco', state: 'CA', zip: '94102', country: 'USA' },
   note: 'Scan to add contact info'
 });
-console.log(`  vCard:\n${contact_vcard.split('\n').map(l => '    ' + l).join('\n')}`);
+console.log(`  vCard:\n${contact_vcard.split('\n').map(l => `    ${l}`).join('\n')}`);
 
 const vcard_qr = encode_qr(contact_vcard, 'svg', { ecc: 'medium' });
 await Bun.write('examples/output/vcard_qr.svg', vcard_qr);
@@ -101,7 +101,7 @@ const meeting = encode_calendar_event({
   location: 'Conference Room A',
   description: 'Daily team synchronization meeting'
 });
-console.log(`  Calendar event:\n${meeting.split('\n').map(l => '    ' + l).join('\n')}`);
+console.log(`  Calendar event:\n${meeting.split('\n').map(l => `    ${l}`).join('\n')}`);
 
 const event_qr = encode_qr(meeting, 'svg', { ecc: 'medium' });
 await Bun.write('examples/output/event_qr.svg', event_qr);

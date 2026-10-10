@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import encode_qr, { utils } from '../src/index';
+import encode_qr, { utils, validate_version } from '../src/index';
 import { encode_email, encode_url, encode_wifi } from '../src/links';
 
 type QrFixtureOutput = 'ascii' | 'svg' | 'gif';
@@ -45,11 +45,12 @@ const linkFixtures = await Bun.file(new URL('./fixtures/link-fixtures.json', imp
  * Before re-baselining any value here, confirm the new output is spec-correct rather than
  * simply different.
  *
- * The actual correctness oracle lives in `tests/roundtrip.test.ts`, which validates rendered
+ * The structural correctness oracle lives in `tests/roundtrip.test.ts`, which validates rendered
  * symbols against ISO/IEC 18004 (format-information BCH(15,5), version BCH(18,6), function
  * pattern geometry, and published byte-capacity limits) using arithmetic that shares no code
  * with `src/`. It covers these same fixture payloads specifically so that a mask change is
- * verified against the spec, not just re-hashed.
+ * verified against the spec, not just re-hashed. `tests/interop.test.ts` additionally
+ * decodes QR payloads and GIF pixels with independent, development-only libraries.
  *
  * These tests are kept because byte-stability regression detection is genuinely valuable —
  * just do not mistake a green run here for proof of conformance.
@@ -125,6 +126,30 @@ describe('validation: text_encoder return value', () => {
   test('a conforming encoder still matches the default output', () => {
     const custom = encode_qr('secret-payload', 'ascii', { encoding: 'byte', text_encoder: (t) => new TextEncoder().encode(t) });
     expect(custom).toBe(encode_qr('secret-payload', 'ascii', { encoding: 'byte' }));
+  });
+
+  test('encodes bytes once per invocation, with or without an explicit version', () => {
+    for (const version of [undefined, validate_version(3)]) {
+      let calls = 0;
+      const text_encoder = (value: string) => {
+        calls++;
+        // A second invocation would produce different payload bytes.
+        return new TextEncoder().encode(calls === 1 ? value : 'different');
+      };
+      expect(encode_qr('café', 'raw', { encoding: 'byte', version, text_encoder })).toEqual(
+        encode_qr('café', 'raw', { encoding: 'byte', version })
+      );
+      expect(calls).toBe(1);
+    }
+  });
+
+  test('does not share byte payloads between calls', () => {
+    const text_encoder = (value: string) => new TextEncoder().encode(value);
+    const first = encode_qr('first', 'raw', { text_encoder });
+    const second = encode_qr('second', 'raw', { text_encoder });
+    expect(first).toEqual(encode_qr('first'));
+    expect(second).toEqual(encode_qr('second'));
+    expect(first).not.toEqual(second);
   });
 });
 

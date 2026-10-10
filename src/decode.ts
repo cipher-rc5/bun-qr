@@ -2,7 +2,7 @@
 // description: QR code decoder/reader for Bun runtime
 // reference: https://github.com/cipher-rc5/bun-qr
 
-import { type Image as QrImage, type Point } from './index';
+import type { Image as QrImage, Point } from './index';
 
 // Finder pattern structure
 export type FinderPoints = [Pattern, Pattern, Point, Pattern];

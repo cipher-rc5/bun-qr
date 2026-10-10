@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- GIF LZW width transitions now preserve decoded pixels; independent GIF/QR decoders cover width boundaries, dictionary resets, all QR versions, encoding modes, ECC levels and masks.
+- CLI writes use filesystem paths and atomic exclusive creation; URL metacharacters, existing links and competing writers cannot bypass overwrite protection.
+- Email addresses cannot inject mailto fields; valid local-part punctuation is percent-encoded.
+- URL helpers share scheme detection with the CLI and reject explicit unsupported schemes before adding HTTPS.
+- vCard 4.0 requires a formatted name, derived from personal names or organization when available. A `formatted_name` option supports other contacts. Phones use `tel:` URI values; website URLs are validated and serialized as HTTP/HTTPS URIs. Content lines use CRLF and UTF-8-safe folding.
+- Calendar QR fragments use CRLF and reject an end at or before start in the emitted DATE/DATE-TIME format, including same-day all-day and subsecond timed endpoints.
+- Phone/SMS/vCard/WhatsApp normalization rejects embedded or repeated plus signs and controls.
+- Bitcoin requests serialize decimal BTC without exponent notation, accept one optional `bitcoin:` prefix and reject sub-satoshi precision, rounding and amounts above 21000000 BTC. Address checksum/network validation remains the caller's responsibility.
+- Public QR overloads accept omitted/default output and dynamic `Output` values. Byte-mode text encoding runs once per generation.
+
+### Changed
+
+- Package exports resolve only for Bun, and public entry points require the Bun runtime. Development commands force Bun for Node-shebang tool wrappers, and GitHub Release creation uses the native GitHub CLI instead of a Node-based script action.
+- Automatic dependency install scripts are disabled; precompiled development tools initialize through their Bun-executed wrappers.
+- Bun 1.4.2 is the supported minimum and development/CI/release pin; verification enforces the manifest, matrix and workflow pins together.
+- dprint and independent test decoders are exact-pinned development dependencies. Installation no longer formats source or suppresses formatter errors.
+- `just ci` includes audit, toolchain and consumer package verification with coverage. Concrete presenter and executable CLI tests verify routing, colors, files and exit codes.
+- Tag releases verify consumer imports and declarations, produce signed GitHub/Sigstore provenance and publish the same checked/attested tarball. The release bundle and verification instructions are provided separately from npm registry provenance.
+
 ## [0.2.0] — unreleased
 
 Prepared as the first published release; not yet tagged or published to npm. Version
@@ -15,7 +36,7 @@ changes below break no released API.
 
 This is a `0.x` release: under semantic versioning the public API may still change in any
 minor release. The decoder (`src/decode.ts`) remains unimplemented, and the encoder is
-verified structurally against ISO/IEC 18004 rather than by a full data-region round-trip.
+verified structurally against ISO/IEC 18004 and through independent data-region and GIF-pixel round-trips.
 
 **Security fixes**
 
@@ -29,7 +50,7 @@ verified structurally against ISO/IEC 18004 rather than by a full data-region ro
 - `escape_vcard` now escapes bare `\r` as well as `\n`, per RFC 6350 §3.2. Escaping only
   `\n` left a real carriage return in the output, so CRLF injection survived escaping in
   every vCard and VEVENT field.
-- `encode_bitcoin` now validates and percent-encodes the address and rejects non-finite or
+- `encode_bitcoin` validates the address boundary and rejects non-finite or
   negative amounts. An address containing `?` previously let an attacker-supplied
   `amount=` win under BIP-21 first-`?` parsing, showing the payer the wrong sum.
 - `encode_geo` now uses `Number.isFinite` guards on all four numeric fields; `NaN` passed
@@ -64,9 +85,9 @@ verified structurally against ISO/IEC 18004 rather than by a full data-region ro
 - GitHub Actions CI workflow (`.github/workflows/ci.yml`) with format check, typecheck, test coverage, and benchmark artifact upload.
 - GitHub Actions release workflow (`.github/workflows/release.yml`) triggered on `v*` tags; publishes with
   `bun publish`, attaching SHA-256 checksums and a CycloneDX SBOM to the GitHub Release. The pipeline is Bun-only
-  end to end — no `npm`, `npx`, or Node toolchain. It therefore does not produce npm provenance attestation:
-  `bun publish` has no `--provenance` flag as of Bun 1.3.14 ([oven-sh/bun#15601](https://github.com/oven-sh/bun/issues/15601))
-  and silently ignores unknown flags, so passing one would yield a green release with no attestation and no warning.
+  end to end — no `npm`, `npx`, or Node package manager/toolchain. GitHub Actions provides signed artifact
+  provenance separately; npm registry provenance is not asserted. `bun publish --help` in Bun 1.4.2 does not list
+  a provenance option (see [oven-sh/bun#15601](https://github.com/oven-sh/bun/issues/15601)).
 - `scripts/sbom.ts`: generates a CycloneDX 1.6 SBOM from `bun.lock`. The npm-based generators cannot run under Bun
   (`@cyclonedx/cyclonedx-npm` segfaults on its native `libxmljs2` binding; `cyclonedx-bom` fails to parse), and they
   inventory the build host's Node install rather than the published artifact. Output is byte-deterministic, carries

@@ -1,4 +1,4 @@
-import { Bitmap } from './bitmap';
+import type { Bitmap } from './bitmap';
 
 const R1_RUN_LENGTH_THRESHOLD = 5;
 const R2_BLOCK_PENALTY = 3;

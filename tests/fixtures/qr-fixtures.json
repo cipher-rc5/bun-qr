@@ -22,7 +22,7 @@
       "id": "gif-url-bun",
       "input": "https://bun.com/",
       "output": "gif",
-      "expected": { "length": 171, "sha256": "71b4d15def1aafce4f85d460e25be1d599a36a04c16107ae58a1a4309df1b828" }
+      "expected": { "length": 170, "sha256": "032ead92b24382f13513ddc23db8ecbdc45219c99c1ff12939ce35bf61e3dff6" }
     }
   ]
 }

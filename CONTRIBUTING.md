@@ -10,9 +10,22 @@ tested — nothing here is aspirational.
 - **[just](https://github.com/casey/just)** (optional) — a command runner. Every recipe in the `justfile` is a
   thin wrapper over a `bun` command, so you can always run the underlying command directly instead.
 
-The Bun version is pinned in `.bun-version` (currently `1.3.14`). `package.json` declares `engines.bun: ">=1.3.0"`,
-and CI tests against both the floor of that range and the pinned version. If you use a version manager that reads
+The Bun version is pinned in `.bun-version` (currently `1.4.2`). `package.json` declares `engines.bun: ">=1.4.2"`.
+CI tests the supported minimum and the pinned version; these currently share one matrix entry. `bun run verify:toolchain`
+checks the executing runtime, manifest, development pin, workflow pins and matrix together. If you use a version manager that reads
 `.bun-version`, it will pick up the right version automatically.
+
+Node.js is not required for application code, tests or development tools. `bunfig.toml` sets `[run] bun = true`,
+and package executables use `bunx --bun` to prevent a Node.js shebang from selecting another runtime.
+Use the package scripts or `just` recipes so this policy applies consistently.
+`[install] ignoreScripts = true` prevents dependency lifecycle hooks from invoking Node.js during installation.
+Precompiled tool binaries are initialized by their wrappers when explicitly run under Bun.
+
+Utility scripts and the benchmark runner use Bun APIs and Bun Shell, without Node imports or globals.
+CLI internals and test fixtures still use Bun's compatibility APIs for operations such as atomic exclusive
+file creation that `Bun.write()` does not expose.
+See [Bun's filesystem documentation](https://bun.com/docs/runtime/file-io).
+GitHub manages the runtimes of third-party Actions; project-authored JavaScript and TypeScript execute with Bun.
 
 ## Getting started
 
@@ -27,36 +40,54 @@ so a lockfile that does not match `package.json` fails the build.
 
 ## The checks
 
-`just ci` runs exactly what CI enforces, in the same order:
+`just ci` runs the local validation gates that CI enforces:
 
 ```sh
-just ci   # fmt-check -> typecheck -> build -> test
+just ci   # toolchain -> audit -> fmt-check -> lint -> typecheck -> build -> package check -> coverage
 ```
 
 Run it before opening a pull request. The individual steps:
 
-| Task             | `just`                | Direct command                           |
-| ---------------- | --------------------- | ---------------------------------------- |
-| Format check     | `just fmt-check`      | `bunx dprint check`                      |
-| Apply formatting | `just fmt`            | `bunx dprint fmt`                        |
-| Typecheck        | `just typecheck`      | `bunx tsc --noEmit`                      |
-| Build (types)    | `just build`          | `bunx tsc --project tsconfig.build.json` |
-| Test             | `just test`           | `bun test`                               |
-| Coverage         | `just coverage`       | `bun test --coverage`                    |
-| Benchmarks       | `just bench`          | `bun run tests/benchmark.ts`             |
-| Verify packaging | `just verify-package` | —                                        |
-| Clean artifacts  | `just clean`          | `rm -rf types dist coverage`             |
+| Task             | `just`                  | Direct command                                 |
+| ---------------- | ----------------------- | ---------------------------------------------- |
+| Toolchain pins   | `just verify-toolchain` | `bun run verify:toolchain`                     |
+| Dependency audit | `just audit`            | `bun audit --audit-level=high`                 |
+| Format check     | `just fmt-check`        | `bunx --bun dprint check`                      |
+| Apply formatting | `just fmt`              | `bunx --bun dprint fmt`                        |
+| Lint check       | `just lint`             | `bun run lint`                                 |
+| Safe lint fixes  | `just lint-fix`         | `bun run lint:fix`                             |
+| Typecheck        | `just typecheck`        | `bunx --bun tsc --noEmit`                      |
+| Build (types)    | `just build`            | `bunx --bun tsc --project tsconfig.build.json` |
+| Test             | `just test`             | `bun test`                                     |
+| Coverage         | `just coverage`         | `bun test --coverage`                          |
+| Benchmarks       | `just bench`            | `bun run tests/benchmark.ts`                   |
+| Verify packaging | `just verify-package`   | `bun run build && bun run verify:package`      |
+| Clean artifacts  | `just clean`            | `rm -rf types dist coverage`                   |
 
 Running `just` with no arguments runs `typecheck` and `test`.
+GitHub additionally uploads coverage and benchmark artifacts. Release jobs check the tag/version match,
+generate checksums and an SBOM, attest the tarball, then publish those same verified bytes.
 
 ## Formatting
 
 Formatting is handled by **[dprint](https://dprint.dev)**, configured in `dprint.json`. It covers TypeScript,
 JSON, Markdown, TOML, and YAML.
+The CLI is an exact-pinned development dependency. Installation does not format or modify source; run formatting explicitly.
 
-Do not hand-format code or argue with the formatter — run `just fmt` (`bunx dprint fmt`) and commit the result.
-CI runs `bunx dprint check` and fails on any difference. `.editorconfig` mirrors `dprint.json` so your editor
+Do not hand-format code or argue with the formatter — run `just fmt` (`bunx --bun dprint fmt`) and commit the result.
+CI runs `bunx --bun dprint check` and fails on any difference. `.editorconfig` mirrors `dprint.json` so your editor
 agrees with the formatter; if the two ever disagree, `dprint.json` is the source of truth.
+
+## Linting
+
+Linting is handled by **[Biome](https://biomejs.dev)**, configured in `biome.json`, with its recommended rules.
+It checks source code, tests, examples, and scripts, and respects `.gitignore` to skip generated artifacts.
+Biome's formatter and assist actions are disabled; dprint handles formatting and import ordering.
+Tests allow non-null assertions for known fixture and array entries under strict TypeScript indexing.
+Utility scripts and the benchmark runner additionally reject Node imports and globals.
+
+Run `just lint` (`bun run lint`) to check for problems. Warnings fail the check in local runs, CI, and the
+publish hook. Run `just lint-fix` (`bun run lint:fix`) to apply safe fixes, then `just fmt` and `just lint`.
 
 ## Tests
 
@@ -79,8 +110,10 @@ build artifact and should not be committed.
 
 ## Verifying the package
 
-`just verify-package` packs the tarball and imports it from a clean Bun consumer, catching broken `exports` maps
-and files missing from the `files` allowlist. CI runs the same check on every OS. Run it locally if you touch
+`just verify-package` builds declarations, packs the tarball, and checks types and imports from a clean Bun consumer,
+catching broken `exports` maps and missing files. CI runs the same script on every OS; releases run it against the
+exact tarball that will be attested and published. Use `bun run verify:package path/to/package.tgz` to check an existing archive.
+Run it locally if you touch
 `package.json`'s `exports`, `files`, or entry points.
 
 ## Pull requests
@@ -90,7 +123,7 @@ and files missing from the `files` allowlist. CI runs the same check on every OS
 3. Run `just ci` and make sure it passes.
 4. Open a pull request describing what changed and why.
 
-CI runs on every pull request across Ubuntu, macOS, and Windows on both supported Bun versions. All of it must
+CI runs on every pull request across Ubuntu, macOS, and Windows at the supported minimum and development pin. All of it must
 be green before merge.
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`, `fix:`, `docs:`,

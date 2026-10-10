@@ -130,7 +130,7 @@ describe('encode_vcard', () => {
   test('uses vCard 4.0 with CRLF line endings', () => {
     const out = encode_vcard({ first_name: 'John', last_name: 'Doe' });
     expect(out.startsWith('BEGIN:VCARD\r\nVERSION:4.0')).toBe(true);
-    expect(out.endsWith('END:VCARD')).toBe(true);
+    expect(out.endsWith('END:VCARD\r\n')).toBe(true);
     expect(out).toContain('\r\n');
   });
 
@@ -152,7 +152,7 @@ describe('encode_vcard', () => {
     });
     expect(out).toContain('ORG:Acme Inc');
     expect(out).toContain('TITLE:Engineer');
-    expect(out).toContain('TEL;TYPE=voice:+15551234567');
+    expect(out).toContain('TEL;TYPE=voice:tel:+15551234567');
     expect(out).toContain('EMAIL;TYPE=work:john@example.com');
     expect(out).toContain('URL;TYPE=work:https://example.com');
   });
@@ -163,15 +163,18 @@ describe('encode_vcard', () => {
   });
 
   test('escapes newlines in a note so they cannot inject vCard fields', () => {
-    const out = encode_vcard({ note: 'line1\nEND:VCARD' });
+    const out = encode_vcard({ formatted_name: 'Contact', note: 'line1\nEND:VCARD' });
     expect(out).toContain('NOTE:line1\\nEND:VCARD');
     // Only the real terminator ends the card.
     expect(out.match(/END:VCARD/g)?.length).toBe(2);
-    expect(out.endsWith('END:VCARD')).toBe(true);
+    expect(out.endsWith('END:VCARD\r\n')).toBe(true);
   });
 
   test('renders the structured address in RFC 6350 field order', () => {
-    const out = encode_vcard({ address: { street: '1 Main St', city: 'Springfield', state: 'IL', zip: '62701', country: 'USA' } });
+    const out = encode_vcard({
+      formatted_name: 'Contact',
+      address: { street: '1 Main St', city: 'Springfield', state: 'IL', zip: '62701', country: 'USA' }
+    });
     expect(out).toContain('ADR;TYPE=work:;;1 Main St;Springfield;IL;62701;USA');
   });
 
@@ -179,17 +182,17 @@ describe('encode_vcard', () => {
     expect(() => encode_vcard({ email: 'not-an-email' })).toThrow(/Invalid email in vCard/);
   });
 
-  test('emits a minimal card when no fields are supplied', () => {
-    expect(encode_vcard({})).toBe('BEGIN:VCARD\r\nVERSION:4.0\r\nEND:VCARD');
+  test('requires the RFC 6350 formatted name', () => {
+    expect(() => encode_vcard({})).toThrow(/name/);
+    expect(() => encode_vcard({ first_name: ' ', organization: ' ' })).toThrow(/name/);
+    expect(encode_vcard({ formatted_name: 'Contact' })).toBe('BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Contact\r\nEND:VCARD\r\n');
+    expect(encode_vcard({ organization: 'Acme' })).toContain('FN:Acme');
+    expect(encode_vcard({ first_name: 'John', formatted_name: 'Dr. John' })).toContain('FN:Dr. John');
   });
 
   describe('property injection guards', () => {
-    test('escapes the url so a CRLF cannot inject a property line', () => {
-      const out = encode_vcard({ first_name: 'A', last_name: 'B', url: 'https://x/\r\nX-EVIL:1' });
-      expect(out).toContain('URL;TYPE=work:https://x/\\nX-EVIL:1');
-      // No real property line was created.
-      expect(out).not.toContain('\r\nX-EVIL:1');
-      expect(out.split('\r\n').some((line) => line.startsWith('X-EVIL'))).toBe(false);
+    test('rejects url controls before they can inject a property line', () => {
+      expect(() => encode_vcard({ first_name: 'A', last_name: 'B', url: 'https://x/\r\nX-EVIL:1' })).toThrow(/Invalid URL/);
     });
 
     test('escapes a bare CR so it cannot terminate a property line', () => {
@@ -203,13 +206,13 @@ describe('encode_vcard', () => {
       expect(out).toContain('ORG:Acme\\nTEL:911');
       expect(out).not.toContain('ORG:Acme\\n\\nTEL:911');
       // The only CRLFs left are the real line separators.
-      expect(out).toBe('BEGIN:VCARD\r\nVERSION:4.0\r\nORG:Acme\\nTEL:911\r\nEND:VCARD');
+      expect(out).toBe('BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Acme\\nTEL:911\r\nORG:Acme\\nTEL:911\r\nEND:VCARD\r\n');
     });
 
     test.each([['CRLF', '\r\n'], ['bare CR', '\r'], ['bare LF', '\n']])('escapes a %s in a note', (_label, sep) => {
-      const out = encode_vcard({ note: `a${sep}b` });
+      const out = encode_vcard({ formatted_name: 'Contact', note: `a${sep}b` });
       expect(out).toContain('NOTE:a\\nb');
-      expect(out.split('\r\n').filter(Boolean).length).toBe(4);
+      expect(out.split('\r\n').filter(Boolean).length).toBe(5);
     });
 
     test('escapes line breaks in every free-text field', () => {
@@ -218,19 +221,19 @@ describe('encode_vcard', () => {
         last_name: 'B\r\nX-L:1',
         organization: 'O\r\nX-O:1',
         title: 'T\r\nX-T:1',
-        url: 'https://u/\r\nX-U:1',
+        url: 'https://u/',
         note: 'N\r\nX-N:1',
         address: { street: 'S\r\nX-S:1', city: 'C\r\nX-C:1', state: 'ST\r\nX-ST:1', zip: 'Z\r\nX-Z:1', country: 'CO\r\nX-CO:1' }
       });
       // Every line is a known vCard property; nothing injected.
-      for (const line of out.split('\r\n')) {
+      for (const line of out.split('\r\n').filter(Boolean)) {
         expect(line).toMatch(/^(BEGIN|VERSION|N|FN|ORG|TITLE|URL|ADR|NOTE|END)[;:]/);
       }
     });
 
     test('leaves the phone and email fields injection-proof', () => {
-      // TEL is stripped to digits and a leading plus; EMAIL is regex-validated.
-      expect(encode_vcard({ phone: '+1-555\r\nX-EVIL:1' })).toContain('TEL;TYPE=voice:+1555');
+      // Both fields reject input that could change or inject a destination.
+      expect(() => encode_vcard({ formatted_name: 'Contact', phone: '+1-555\r\nX-EVIL:1' })).toThrow(/Invalid phone/);
       expect(() => encode_vcard({ email: 'a@b.com\r\nX-EVIL:1' })).toThrow(/Invalid email in vCard/);
     });
   });
@@ -368,7 +371,7 @@ describe('encode_calendar_event', () => {
   test('wraps the event in VEVENT delimiters', () => {
     const out = encode_calendar_event({ title: 'Sync', start: new Date('2024-02-01T14:00:00Z') });
     expect(out.startsWith('BEGIN:VEVENT')).toBe(true);
-    expect(out.endsWith('END:VEVENT')).toBe(true);
+    expect(out.endsWith('END:VEVENT\r\n')).toBe(true);
   });
 
   test('formats timed events as basic-format UTC stamps', () => {
@@ -496,7 +499,7 @@ describe('encode_bitcoin', () => {
     test('rejects an address carrying its own query string', () => {
       // BIP-21 parsers split on the first `?`, so the smuggled amount would have won.
       expect(() => encode_bitcoin('addr?amount=999&x=1', { amount: 0.1 })).toThrow(
-        "Invalid Bitcoin address: addr?amount=999&x=1. Expected only alphanumeric characters, ':', or '-'"
+        'Invalid Bitcoin address: addr?amount=999&x=1. Expected an alphanumeric address'
       );
     });
 
@@ -517,8 +520,8 @@ describe('encode_bitcoin', () => {
       expect(encode_bitcoin(bech32)).toBe(`bitcoin:${bech32}`);
     });
 
-    test('preserves a literal colon in the address prefix', () => {
-      expect(encode_bitcoin('bitcoin:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa')).toBe('bitcoin:bitcoin:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
+    test('accepts one bitcoin prefix without duplicating it', () => {
+      expect(encode_bitcoin('bitcoin:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa')).toBe('bitcoin:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
     });
   });
 

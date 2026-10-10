@@ -22,6 +22,9 @@ await Bun.write('qr.svg', qr);
 
 ### 1. URLs/Websites
 
+Only HTTP and HTTPS are accepted. Explicit unsupported schemes are rejected before HTTPS is added.
+`localhost:port` and dotted-hostname ports support shorthand; other single-label hosts with ports need explicit `http(s)://`.
+
 ```typescript
 import { encode_url } from 'bun-qr/links';
 
@@ -38,6 +41,9 @@ const url3 = encode_url('http://example.com', { auto_protocol: false });
 ```
 
 ### 2. Email
+
+Addresses use unquoted dot-atom syntax with DNS-style domains. Local-part URI punctuation is percent-encoded;
+recipient strings cannot contain additional mailto fields. Subject, body, cc and bcc are encoded query values.
 
 ```typescript
 import { encode_email } from 'bun-qr/links';
@@ -56,6 +62,9 @@ const email2 = encode_email('support@example.com', {
 ```
 
 ### 3. Phone Numbers
+
+Phone, SMS, vCard and WhatsApp helpers accept digits, spaces, parentheses, hyphens and at most one leading `+`.
+Embedded/repeated plus signs and control characters are rejected. Formatting preserves the destination digits.
 
 ```typescript
 import { encode_phone } from 'bun-qr/links';
@@ -81,6 +90,10 @@ const sms2 = encode_sms('+1-555-123-4567', { body: 'Thanks for scanning! Reply Y
 ```
 
 ### 5. vCard (Contact Information)
+
+A vCard requires a display name: use `formatted_name`, personal name parts, or `organization` as a fallback.
+Empty or nameless cards throw. vCard 4.0 phone values use `tel:` URIs; content lines are UTF-8 folded at 75 octets and terminated with CRLF.
+Website fields follow the HTTP/HTTPS URL policy and are serialized as URIs; malformed URLs and embedded controls throw.
 
 ```typescript
 import { encode_vcard } from 'bun-qr/links';
@@ -144,6 +157,10 @@ const location2 = encode_geo({
 
 ### 8. Calendar Events
 
+This helper emits a VEVENT fragment for QR scanners, rather than a complete `.ics` calendar file.
+Dates are serialized in UTC with a four-digit year (0000–9999), timed values have second precision, and an optional end must be strictly later in the emitted format.
+All-day end dates are exclusive: use the next UTC day for a one-day event. Content lines use CRLF and UTF-8-safe folding.
+
 ```typescript
 import { encode_calendar_event } from 'bun-qr/links';
 
@@ -174,6 +191,11 @@ const whatsapp2 = encode_whatsapp('+1-555-123-4567', 'Hello! I found you via QR 
 ```
 
 ### 10. Bitcoin Payments
+
+Amounts are decimal BTC in `[0, 21000000]` with at most eight decimal places. Sub-satoshi amounts and values that would
+require rounding throw; calculate amounts without floating-point arithmetic drift. One satoshi is emitted as `0.00000001`.
+An address may have one `bitcoin:` prefix, which is not duplicated. The helper checks the URI boundary;
+the caller remains responsible for checking the address checksum, network and intended recipient.
 
 ```typescript
 import { encode_bitcoin } from 'bun-qr/links';

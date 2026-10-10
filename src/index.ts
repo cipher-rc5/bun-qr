@@ -2,6 +2,7 @@
 // description: qr code encoder for bun runtime
 // reference: https://github.com/cipher-rc5/bun-qr
 
+import './runtime';
 import { Bitmap } from './core/bitmap';
 import { detect_type as detect_type_core, encode_payload } from './core/encoder';
 import { create_interleaver } from './core/error-correction';
@@ -313,10 +314,11 @@ function select_version(ecc: ErrorCorrection, text: string, encoding: EncodingTy
 export type Output = 'raw' | 'ascii' | 'term' | 'gif' | 'svg';
 
 // Main QR code encoder (public API)
-export function encode_qr(text: string, output: 'raw', opts?: QrOpts): boolean[][];
+export function encode_qr(text: string, output?: 'raw', opts?: QrOpts): boolean[][];
 export function encode_qr(text: string, output: 'ascii' | 'term', opts?: QrOpts): string;
 export function encode_qr(text: string, output: 'svg', opts?: QrOpts & SvgQrOpts): string;
 export function encode_qr(text: string, output: 'gif', opts?: QrOpts): Uint8Array;
+export function encode_qr(text: string, output: Output, opts?: QrOpts & SvgQrOpts): boolean[][] | string | Uint8Array;
 export function encode_qr(text: string, output: Output = 'raw', opts: QrOpts & SvgQrOpts = {}) {
   // `detect_type` iterates `text` and runs before `utf8_to_bytes`' own guard, so a non-string
   // leaked a raw `TypeError: number is not iterable` out of the engine. Same for a null/
@@ -330,7 +332,11 @@ export function encode_qr(text: string, output: Output = 'raw', opts: QrOpts & S
   const encoding = opts.encoding !== undefined ? opts.encoding : detect_type(text);
   validate_encoding(encoding);
   if (opts.mask !== undefined) validate_mask(opts.mask as Mask);
-  const encoder = guard_encoder(opts.text_encoder ?? utf8_to_bytes);
+  const guarded_encoder = guard_encoder(opts.text_encoder ?? utf8_to_bytes);
+  // This invocation encodes one text value. Reuse its measured bytes for the
+  // payload so version selection cannot allocate twice or observe a changed callback.
+  let bytes: Uint8Array | undefined;
+  const encoder = (value: string): Uint8Array => bytes ??= guarded_encoder(value);
 
   let ver: Version;
   if (opts.version !== undefined) {

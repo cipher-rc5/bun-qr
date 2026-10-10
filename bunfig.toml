@@ -1,0 +1,8 @@
+# Run dependency executables with Bun even when they declare a Node.js shebang.
+[run]
+bun = true
+
+# Dependency lifecycle scripts can invoke Node directly, outside the run policy.
+# Tool wrappers initialize their precompiled binaries when explicitly run with Bun.
+[install]
+ignoreScripts = true

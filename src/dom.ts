@@ -7,12 +7,12 @@ export const get_size = (elm: HTMLElement): { width: number, height: number } =>
   const css = getComputedStyle(elm);
   const width = parseFloat(css.width);
   const height = parseFloat(css.height);
-  if (!isFinite(width) || width <= 0) {
+  if (!Number.isFinite(width) || width <= 0) {
     throw new Error(
       `get_size: could not read element width (got "${css.width}"). Ensure the element is attached to the DOM and has a resolved layout.`
     );
   }
-  if (!isFinite(height) || height <= 0) {
+  if (!Number.isFinite(height) || height <= 0) {
     throw new Error(
       `get_size: could not read element height (got "${css.height}"). Ensure the element is attached to the DOM and has a resolved layout.`
     );
@@ -43,7 +43,7 @@ export class QRCanvas {
 
 // Frame loop utility
 export function frame_loop(cb: FrameRequestCallback): () => void {
-  let handle: number | undefined = undefined;
+  let handle: number | undefined;
   function loop(ts: number) {
     cb(ts);
     handle = requestAnimationFrame(loop);
@@ -60,7 +60,7 @@ export function frame_loop(cb: FrameRequestCallback): () => void {
 export function svg_to_png(svg_data: string, width: number, height: number): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!(Number.isSafeInteger(width) && Number.isSafeInteger(height) && width > 0 && height > 0 && width < 8192 && height < 8192)) {
-      return reject(new Error('invalid width and height: ' + width + ' ' + height));
+      return reject(new Error(`invalid width and height: ${width} ${height}`));
     }
 
     const dom_parser = new DOMParser();
@@ -80,8 +80,8 @@ export function svg_to_png(svg_data: string, width: number, height: number): Pro
     const source = serializer.serializeToString(doc);
     const img = new Image();
 
-    img.src = 'data:image/svg+xml,' + encodeURIComponent(source);
-    img.onload = function() {
+    img.src = `data:image/svg+xml,${encodeURIComponent(source)}`;
+    img.onload = () => {
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;

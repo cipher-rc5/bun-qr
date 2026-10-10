@@ -1,0 +1,136 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["src/**", "tests/**", "examples/*.ts", "scripts/**"] },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": { "enabled": true, "rules": { "preset": "recommended" } },
+  "overrides": [
+    { "includes": ["tests/**"], "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } } },
+    {
+      "includes": ["scripts/**", "tests/benchmark.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "node:*",
+                      "assert",
+                      "assert/**",
+                      "async_hooks",
+                      "async_hooks/**",
+                      "buffer",
+                      "buffer/**",
+                      "child_process",
+                      "child_process/**",
+                      "cluster",
+                      "cluster/**",
+                      "console",
+                      "console/**",
+                      "constants",
+                      "constants/**",
+                      "crypto",
+                      "crypto/**",
+                      "dgram",
+                      "dgram/**",
+                      "diagnostics_channel",
+                      "diagnostics_channel/**",
+                      "dns",
+                      "dns/**",
+                      "domain",
+                      "domain/**",
+                      "events",
+                      "events/**",
+                      "fs",
+                      "fs/**",
+                      "http",
+                      "http/**",
+                      "http2",
+                      "http2/**",
+                      "https",
+                      "https/**",
+                      "inspector",
+                      "inspector/**",
+                      "module",
+                      "module/**",
+                      "net",
+                      "net/**",
+                      "os",
+                      "os/**",
+                      "path",
+                      "path/**",
+                      "perf_hooks",
+                      "perf_hooks/**",
+                      "process",
+                      "process/**",
+                      "punycode",
+                      "punycode/**",
+                      "querystring",
+                      "querystring/**",
+                      "readline",
+                      "readline/**",
+                      "repl",
+                      "repl/**",
+                      "sea",
+                      "sea/**",
+                      "sqlite",
+                      "sqlite/**",
+                      "stream",
+                      "stream/**",
+                      "string_decoder",
+                      "string_decoder/**",
+                      "sys",
+                      "sys/**",
+                      "timers",
+                      "timers/**",
+                      "tls",
+                      "tls/**",
+                      "trace_events",
+                      "trace_events/**",
+                      "tty",
+                      "tty/**",
+                      "url",
+                      "url/**",
+                      "util",
+                      "util/**",
+                      "v8",
+                      "v8/**",
+                      "vm",
+                      "vm/**",
+                      "wasi",
+                      "wasi/**",
+                      "worker_threads",
+                      "worker_threads/**",
+                      "zlib",
+                      "zlib/**"
+                    ],
+                    "message": "Use Bun APIs or Bun Shell in project scripts."
+                  }
+                ]
+              }
+            },
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "process": "Use Bun APIs instead of the Node process global.",
+                  "Buffer": "Use Uint8Array and Bun APIs.",
+                  "require": "Use ESM imports.",
+                  "__dirname": "Use import.meta.url and Bun.fileURLToPath.",
+                  "__filename": "Use import.meta.url and Bun.fileURLToPath.",
+                  "global": "Use globalThis.",
+                  "setImmediate": "Use queueMicrotask or setTimeout.",
+                  "clearImmediate": "Use clearTimeout."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

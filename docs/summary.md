@@ -2,11 +2,11 @@
 
 ## Overview
 
-`bun-qr` is a Bun-first, zero-dependency QR code generation library with strict TypeScript typing, a Bun CLI, link encoding utilities, fixture-backed regression tests, and a benchmark suite.
+`bun-qr` is a Bun-first, zero-runtime-dependency QR code generation library with strict TypeScript typing, a Bun CLI, link encoding utilities, fixture-backed regression tests, and a benchmark suite.
 
 ## Current Status
 
-- Encoder: production-ready
+- Encoder: implemented with structural validation and independent decoding tests
 - Decoder (`src/decode.ts`): scaffolded, not implemented yet
 - DOM helpers (`src/dom.ts`): scaffolded for future browser scanning support
 - Runtime/package manager/tooling: Bun only
@@ -36,17 +36,24 @@
 - Typecheck: `bun run typecheck`
 - Tests: `bun test`
 - Benchmarks: `bun run bench`
-- Formatting: `bunx dprint check` / `bunx dprint fmt`
-- CI: `.github/workflows/ci.yml` runs format check, typecheck, declaration build, a packed-tarball
-  import check, and `bun test --coverage` on push/PR, plus a `benchmark` job on `main`
-- Release: `.github/workflows/release.yml` publishes to npm with provenance on `v*` tags
+- Formatting: `bunx --bun dprint check` / `bunx --bun dprint fmt`
+- CI: `.github/workflows/ci.yml` checks toolchain pins, audits dependencies, runs format/lint/type checks,
+  builds declarations, verifies package imports and consumer types, and runs `bun test --coverage` on push/PR.
+  A separate `benchmark` job runs on `main`. The minimum and pinned runtime are Bun 1.4.2.
+- Release: `.github/workflows/release.yml` verifies and publishes the same tarball on `v*` tags, with
+  checksums, a CycloneDX SBOM and signed GitHub/Sigstore provenance (separate from npm registry provenance).
+  Consumer commands are in `docs/RELEASE_VERIFICATION.md`.
 - Correctness oracle: `tests/roundtrip.test.ts` validates rendered symbols against ISO/IEC 18004
   (format-information and version BCH codewords, pattern geometry, published capacity limits)
-  rather than against the encoder's own output
+  rather than against the encoder's own output. `tests/interop.test.ts` uses development-only jsQR and gifuct-js
+  decoders for payload and pixel round-trips, including all QR versions and GIF dictionary resets.
 
 ## Notes on Performance Data
 
-Historical benchmark claims from early migration docs are replaced by executable project benchmarks in `tests/benchmark.ts`. Use `bun run bench` for current numbers on your machine.
+Benchmarks in `tests/benchmark.ts` report the Bun version and host platform/architecture, five measured batches after warmup,
+aggregate throughput, median batch duration and range. Cases include common formats, link helpers,
+a near-capacity byte payload and scaled GIF output. Use `bun run bench` for current numbers on your machine;
+batch timings are measurements, not latency guarantees.
 
 ## Roadmap
 

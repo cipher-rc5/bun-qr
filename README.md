@@ -17,7 +17,7 @@ QR code generator built using the bun runtime. Zero dependencies, strict TypeScr
 - Snake_case API for Rust compatibility
 - Comprehensive error correction support
 - Encoding verified against ISO/IEC 18004 by an independent spec oracle, not just golden hashes
-- CI with format check, typecheck, declaration build, packaged-import check, and coverage
+- CI with format check, lint, typecheck, declaration build, packaged-import check, and coverage
 
 ## Installation
 
@@ -37,6 +37,9 @@ import { encode_wifi } from 'bun-qr/links';
 ```
 
 The package ships TypeScript sources and is resolved through the `bun` export condition, so Bun runs `src/` directly. Type declarations are emitted for editors and `tsc` consumers.
+
+Bun 1.4.2 or newer is required; Node.js is not a supported runtime. Package exports resolve only for Bun, and both public entry points check for Bun at startup.
+Development scripts force JavaScript tool wrappers to run with Bun, including tools with a Node.js shebang.
 
 ### From source
 
@@ -60,7 +63,7 @@ bun run qr -- https://bun.sh --size 128 --output bun-128.svg
 You can also run the binary name directly after install:
 
 ```bash
-bunx bun-qr https://bun.com --format svg --output bun.svg
+bunx --bun bun-qr https://bun.com --format svg --output bun.svg
 ```
 
 ### Options
@@ -79,14 +82,16 @@ Behaviour notes:
 - Unknown options are rejected rather than ignored; a missing `<url>` argument exits non-zero with a usage error.
 - `--size` applies to SVG output only, and is bounded by the `MAX_QR_PIXELS` raster guard (4000 x 4000).
 - Without `--force`, the CLI refuses to overwrite an existing output file.
+- Creation is exclusive and atomic across competing writers; filename characters such as `#` and `%` are treated literally.
 - Status and error messages go to stderr, so `stdout` stays clean for piping `ascii`/`term` output.
-- Colorization uses `Bun.color()` and is disabled automatically when stdout is not a TTY.
+- Presenter colorization uses `Bun.color()` and checks each stream's TTY independently. The `term` renderer itself emits ANSI artwork; use `ascii` for plain text.
 - URLs are auto-normalized by adding `https://` when the scheme is missing.
 
 ## Development
 
 ```bash
 bun install
+bun run lint
 bun run typecheck
 bun test
 bun run bench
@@ -96,11 +101,14 @@ bun run bench
 - `test`: unit and fixture regression tests
 - `bench`: Bun runtime benchmark suite
 - `fmt` / `fmt:check`: dprint formatting
+- `lint` / `lint:fix`: Biome lint checks and safe fixes, configured in `biome.json`
 - `build`: declaration-only emit for editors and `tsc` consumers
+- `verify:toolchain`: check supported Bun versions and workflow/development pins
+- `verify:package`: check packed exports and declarations from a clean consumer
 
 A [`justfile`](justfile) wraps the same commands: `just` (typecheck + test), `just ci`
-(everything CI enforces), plus `typecheck`, `test`, `coverage`, `bench`, `fmt`,
-`fmt-check`, `build`, `verify-package`, and `clean`.
+(toolchain, audit, formatting, lint, types, build, package verification and coverage), plus individual task recipes.
+GitHub also uploads coverage and benchmark artifacts. dprint is exact-pinned, and installation leaves source untouched.
 
 ## Architecture
 
@@ -120,16 +128,23 @@ The core encoder has been separated by concern (SOLID-oriented modules):
 - Deterministic fixtures live in `tests/fixtures/`
 - QR fixture tests validate output length + SHA-256 stability (change detection, not correctness — see the note in `tests/index.test.ts`)
 - `tests/roundtrip.test.ts` verifies rendered symbols against ISO/IEC 18004 independently of the encoder's internals: format-information BCH(15,5), version BCH(18,6), pattern geometry, and published byte capacities
+- `tests/interop.test.ts` independently decodes QR payloads across every version, mode/ECC boundaries and all masks with jsQR, and GIF pixels with gifuct-js; both are development-only dependencies
+- `tests/cli.io.test.ts` exercises exclusive writes, competing writers, terminal presentation and the executable CLI
+- `tests/api.types.ts` checks public overloads during typechecking; package verification additionally checks emitted consumer declarations
 - `tests/core/bitmap.test.ts` covers the four renderers, the geometry primitives, and the `MAX_QR_PIXELS` guard
 - Link fixture tests validate canonical URL/email/WiFi encodings
 - Benchmarks are defined in `tests/benchmark.ts` and run with `bun run bench`
+- Benchmarks record Bun/platform metadata, warmups and five measured batches, including near-capacity and scaled-image cases
 
 ## CI
 
 `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. The `test` job:
 
 - `bun install --frozen-lockfile`
-- `bunx dprint check` (format check)
+- toolchain pins and supported minimum verified by the prerequisite `version-pin` job
+- `bun audit --audit-level=high`
+- `bunx --bun dprint check` (format check)
+- `bun run lint` (Biome lint check; warnings fail the check)
 - `bun run typecheck`
 - `bun run build` (declaration emit) and verification that `types/index.d.ts` and `types/links.d.ts` exist
 - packs the tarball and verifies it imports cleanly from a fresh Bun consumer (both `bun-qr` and `bun-qr/links`)
@@ -137,7 +152,11 @@ The core encoder has been separated by concern (SOLID-oriented modules):
 
 A second `benchmark` job runs only on `main`; it executes `bun run bench` and uploads the results as an artifact.
 
-`.github/workflows/release.yml` triggers on `v*` tags. It re-runs every CI gate, verifies the tag matches `package.json` version, packs the tarball with SHA-256 checksums, generates a CycloneDX SBOM, publishes to npm, and creates a GitHub Release with the artifacts attached.
+`.github/workflows/release.yml` triggers on `v*` tags. It runs the validation gates, verifies the tag matches
+`package.json`, generates a CycloneDX SBOM and SHA-256 checksums, verifies the packed tarball with a clean consumer,
+and creates a signed GitHub/Sigstore build attestation. It publishes that same tarball with Bun and attaches the
+archive, checksums, SBOM and provenance bundle to the GitHub Release. This attestation is separate from npm registry provenance.
+See [release verification](docs/RELEASE_VERIFICATION.md) for consumer commands and the first-release validation procedure.
 
 ## Quick Start
 
@@ -264,6 +283,8 @@ const svg = encode_qr('café', 'svg', { encoding: 'byte', text_encoder: latin1 }
 > Keep it a pure string-to-bytes transform — never `eval` it, use it to build shell or SQL
 > strings, or let it perform I/O. A `text_encoder` that returns more bytes than the chosen
 > version can hold causes encoding to fail rather than silently truncate.
+
+Byte-mode encoding invokes this callback once per QR generation and reuses the measured bytes for the payload.
 
 ### Other Exports
 

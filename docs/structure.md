@@ -11,6 +11,7 @@ bun-qr/
 |- docs/
 |  |- CHANGELOG.md
 |  |- LINK_ENCODING.md
+|  |- RELEASE_VERIFICATION.md
 |  |- structure.md
 |  |- summary.md
 |  `- tree.md
@@ -18,6 +19,11 @@ bun-qr/
 |  |- basic.ts
 |  |- links.ts
 |  `- output/
+|- scripts/
+|  |- bun-utils.ts
+|  |- sbom.ts
+|  |- verify-package.ts
+|  `- verify-toolchain.ts
 |- src/
 |  |- cli/
 |  |  |- app.ts
@@ -32,13 +38,15 @@ bun-qr/
 |  |  |- error-correction.ts
 |  |  |- layout.ts
 |  |  |- penalty.ts
+|  |  |- url.ts
 |  |  |- tables.ts
 |  |  `- utils.ts
 |  |- cli.ts
 |  |- decode.ts
 |  |- dom.ts
 |  |- index.ts
-|  `- links.ts
+|  |- links.ts
+|  `- runtime.ts
 |- tests/
 |  |- core/
 |  |  |- bitmap.test.ts
@@ -53,6 +61,13 @@ bun-qr/
 |  |- benchmark.ts
 |  |- cli.app.test.ts
 |  |- cli.args.test.ts
+|  |- interop.test.ts
+|  |- api.types.ts
+|  |- cli.io.test.ts
+|  |- links.regressions.test.ts
+|  |- toolchain.test.ts
+|  |- runtime.test.ts
+|  |- scripts.test.ts
 |  |- index.test.ts
 |  |- links.test.ts
 |  `- roundtrip.test.ts
@@ -60,6 +75,8 @@ bun-qr/
 |- LICENSE-MIT
 |- README.md
 |- SECURITY.md
+|- biome.json
+|- bunfig.toml
 |- dprint.json
 |- justfile
 |- package.json
@@ -76,11 +93,15 @@ bun-qr/
 - `src/links.ts`: structured payload helpers for common QR data formats.
 - `tests/core/*`: white-box unit tests for the individual core modules.
 - `tests/roundtrip.test.ts`: ISO/IEC 18004 structural verification independent of encoder internals.
+- `tests/interop.test.ts`: independent QR payload/GIF pixel decoding with development-only decoders.
+- `tests/cli.io.test.ts`: exclusive filesystem writes, concrete presenter and executable CLI integration.
+- `scripts/*`: Bun-native filesystem helpers, toolchain checks, clean-consumer package verification and SBOM generation.
 - `tests/fixtures/*`: deterministic fixture data for regression tests.
 
 ## Engineering conventions
 
 - Runtime/tooling/package manager: Bun
+- `bunfig.toml` and `bunx --bun` force JavaScript dependency wrappers to use Bun; public entry points reject a missing Bun runtime. Filesystem compatibility APIs are provided by Bun itself.
 - API style: snake_case for core QR API compatibility style
 - Type system: strict TypeScript with no implicit unsafety
 - Validation strategy:
@@ -92,17 +113,6 @@ bun-qr/
 
 `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests.
 
-The `test` job:
+The prerequisite `version-pin` job checks the executing runtime, engine minimum, development and workflow pins, and test matrix. The `test` job installs with the frozen lockfile, audits dependencies, checks dprint and Biome, typechecks and builds declarations, verifies packed consumer imports and types, then runs coverage. GitHub uploads the coverage report.
 
-1. `bun install --frozen-lockfile`
-2. `bunx dprint check`
-3. `bun run typecheck`
-4. `bun run build`, then asserts `types/index.d.ts` and `types/links.d.ts` exist
-5. packs the tarball and imports it from a clean Bun consumer (`bun-qr` and `bun-qr/links`)
-6. `bun test --coverage`, uploading `coverage/` as an artifact
-
-The `benchmark` job runs only on `main`: `bun run bench`, uploading the output as an artifact.
-
-`.github/workflows/release.yml` triggers on `v*` tags. It repeats every CI gate, verifies the
-tag matches `package.json` version, packs the tarball with SHA-256 checksums, generates a
-CycloneDX SBOM, publishes to npm, and creates a GitHub Release with the artifacts attached.
+The `benchmark` job runs only on `main`, uploading the measurement output. Releases re-run the validation gates, verify the tag/version match and exact package archive, generate checksums and an SBOM, attest the tarball with GitHub/Sigstore and publish that same archive. See [release verification](RELEASE_VERIFICATION.md).
