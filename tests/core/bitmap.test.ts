@@ -203,10 +203,10 @@ describe('border, embed, slice, clone, inverse', () => {
     expect(b.to_string()).toBe('    \n XX \n XX \n    ');
   });
 
-  test('border defaults to 2 modules', () => {
+  test('border defaults to 4 modules', () => {
     const b = Bitmap.from_string('X').border(undefined, false);
-    expect(b.width).toBe(5);
-    expect(b.height).toBe(5);
+    expect(b.width).toBe(9);
+    expect(b.height).toBe(9);
   });
 
   test('border of 0 is a no-op in size', () => {

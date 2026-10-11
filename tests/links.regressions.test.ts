@@ -1,5 +1,70 @@
 import { describe, expect, test } from 'bun:test';
-import { encode_bitcoin, encode_calendar_event, encode_email, encode_phone, encode_sms, encode_url, encode_vcard, encode_whatsapp } from '../src/links';
+import { encode_bitcoin, encode_calendar_event, encode_email, encode_geo, encode_phone, encode_sms, encode_url, encode_vcard, encode_whatsapp } from '../src/links';
+
+describe('RFC 5870 geographic URI grammar', () => {
+  // RFC 5870 section 3.3: coordinates use signed decimals; uncertainty uses an
+  // unsigned decimal semicolon parameter. No query, exponent or plus syntax.
+  const grammar = /^geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:,(-?\d+(?:\.\d+)?))?(?:;u=(\d+(?:\.\d+)?))?$/;
+  test.each([1e-7, -1e-7, Number.MIN_VALUE, -Number.MIN_VALUE, 1.0000000000000002e-7, 89.99999999999999])(
+    'round-trips coordinate %p through decimal-only syntax',
+    (value) => {
+      const result = grammar.exec(encode_geo({ latitude: value, longitude: value }));
+      expect(result).not.toBeNull();
+      expect(Number(result![1])).toBe(value);
+      expect(Number(result![2])).toBe(value);
+    }
+  );
+  test.each([Number.MIN_VALUE, -Number.MIN_VALUE, 1e21, -1e21, 1.2345678901234568e21, Number.MAX_VALUE, -Number.MAX_VALUE])(
+    'preserves finite altitude %p without exponent notation',
+    (altitude) => {
+      const result = grammar.exec(encode_geo({ latitude: 1, longitude: 2, altitude }));
+      expect(result).not.toBeNull();
+      expect(Number(result![3])).toBe(altitude);
+    }
+  );
+  test.each([0, Number.MIN_VALUE, 1e-7, 1e21, Number.MAX_VALUE])('preserves uncertainty %p as a decimal parameter', (uncertainty) => {
+    const result = grammar.exec(encode_geo({ latitude: 1, longitude: 2, uncertainty }));
+    expect(result).not.toBeNull();
+    expect(Number(result![4])).toBe(uncertainty);
+  });
+  test('distinguishes absent uncertainty from zero and normalizes negative zero', () => {
+    expect(encode_geo({ latitude: 1, longitude: 2 })).toBe('geo:1,2');
+    expect(encode_geo({ latitude: -0, longitude: -0, altitude: -0, uncertainty: -0 })).toBe('geo:0,0,0;u=0');
+    expect(encode_geo({ latitude: 1, longitude: 2, uncertainty: 50 })).toBe('geo:1,2;u=50');
+  });
+});
+
+describe('vCard/calendar content text boundaries', () => {
+  const fields: [string, (text: string) => string][] = [
+    ...(['formatted_name', 'first_name', 'last_name', 'organization', 'title', 'note'] as const).map(field =>
+      [`vCard ${field}`, (text: string) => encode_vcard({ formatted_name: 'Contact', [field]: text })] as [string, (text: string) => string]
+    ),
+    ...(['street', 'city', 'state', 'zip', 'country'] as const).map(field =>
+      [`vCard address.${field}`, (text: string) => encode_vcard({ formatted_name: 'Contact', address: { [field]: text } })] as [
+        string,
+        (text: string) => string
+      ]
+    ),
+    ...(['title', 'location', 'description'] as const).map(field =>
+      [
+        `calendar ${field}`,
+        (text: string) => encode_calendar_event({ title: 'Meeting', start: new Date('2026-10-10'), [field]: text })
+      ] as [string, (text: string) => string]
+    )
+  ];
+  const forbidden = Array.from({ length: 33 }, (_, code) => code === 32 ? 127 : code).filter(code => ![9, 10, 13].includes(code));
+  test.each(fields)('rejects every forbidden ASCII control in %s before trimming or serialization', (field, encode) => {
+    for (const code of forbidden) {
+      const control = String.fromCharCode(code);
+      for (const text of [control, `${control}Text`, `A${control}B`, `Text${control}`]) {
+        expect(() => encode(text)).toThrow(`Invalid ${field}: contains forbidden control characters`);
+      }
+    }
+  });
+  test.each(fields)('retains allowed tabs and escapes all newline forms in %s', (_field, encode) => {
+    expect(encode('A\tB\r\nC\rD\nE')).toContain('A\tB\\nC\\nD\\nE');
+  });
+});
 
 describe('recipient URI boundaries', () => {
   test.each([

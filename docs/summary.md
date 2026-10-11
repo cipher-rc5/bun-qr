@@ -19,7 +19,7 @@
 ## Key Capabilities
 
 - Multiple outputs: `raw`, `ascii`, `term`, `svg`, `gif`
-- Defaults: raw output, medium ECC, detected encoding, smallest fitting version, automatic mask, border 2, scale 1
+- Defaults: raw output, medium ECC, detected encoding, smallest fitting version, automatic mask, border 4, scale 1
 - Supported encoding modes: numeric, alphanumeric, byte; exported Kanji/ECI modes are not implemented
 - Link/data helpers: URL, email, phone, SMS, vCard, WiFi, geo, calendar, WhatsApp, Bitcoin
 - CLI generation flow: `bun-qr <url> [--format] [--output] [--size] [--force]`
@@ -47,9 +47,9 @@
 - Benchmarks: `bun run bench`
 - Formatting: `bunx --bun dprint check` / `bunx --bun dprint fmt`
 - CI: `.github/workflows/ci.yml` checks toolchain pins, audits dependencies, runs format/lint/type checks,
-  builds declarations, verifies package imports and consumer types, and runs `bun test --coverage` on push/PR.
+  builds declarations, verifies package imports, consumer types and documentation links, and runs `bun run coverage` on push/PR.
   A separate `benchmark` job runs on `main`. The minimum and pinned runtime are Bun 1.4.2.
-  The coverage upload step targets `coverage/`, but no file reporter is configured; coverage is currently in the logs.
+  Coverage includes console output and `coverage/lcov.info`; CI requires the file and uploads it as an artifact.
 - Release: `.github/workflows/release.yml` verifies and publishes the same tarball on `v*` tags, with
   checksums, a CycloneDX SBOM and signed GitHub/Sigstore provenance (separate from npm registry provenance).
   Consumer commands are in `docs/RELEASE_VERIFICATION.md`.
@@ -71,8 +71,5 @@ batch timings are measurements, not latency guarantees.
 2. Complete browser scanning utilities in `src/dom.ts` (excluded from the published package)
 3. Expand fixtures and benchmark scenarios for larger payload classes
 4. Optional scheduled CI benchmark reporting
-5. Correct geo uncertainty/exponent serialization and complete control-character validation for vCard/calendar fields
-6. Revisit the two-module default border; callers currently need `border: 4` or additional surrounding clear space
-7. Configure file coverage reporting for the existing artifact upload step
 
 The current contracts and limits are documented in [README.md](../README.md) and [LINK_ENCODING.md](LINK_ENCODING.md).

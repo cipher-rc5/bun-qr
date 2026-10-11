@@ -379,9 +379,9 @@ describe('symbol dimensions follow 4v+17 and are fully drawn', () => {
     expect(ratio).toBeLessThan(0.7);
   });
 
-  test('the quiet zone is light and sized as requested', () => {
+  test('the default quiet zone supplies four light modules on each side', () => {
     const border = 4;
-    const m = encode_qr('quiet zone', 'raw', { border }) as Matrix;
+    const m = encode_qr('quiet zone', 'raw') as Matrix;
     const size = m.length;
     for (let i = 0;i < size;i++) {
       for (let b = 0;b < border;b++) {

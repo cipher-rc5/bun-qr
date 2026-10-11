@@ -103,7 +103,7 @@ Behaviour notes:
 - Presenter colorization uses `Bun.color()` and checks each stream's TTY independently. The `term` renderer itself emits ANSI artwork; use `ascii` for plain text.
 - URLs are auto-normalized by adding `https://` when the scheme is missing.
 - Only HTTP/HTTPS URLs are accepted. `localhost:port` and dotted-hostname ports support shorthand; other single-label hosts with ports need an explicit scheme.
-- The CLI uses the encoder's current two-module border. Use the library API with `border: 4` for a four-module quiet zone.
+- The CLI and library use a four-module quiet zone by default. The library API supports custom borders.
 
 ## Development
 
@@ -117,16 +117,17 @@ bun run bench
 
 - `typecheck`: strict TypeScript validation
 - `test`: unit and fixture regression tests
+- `coverage`: console coverage and an LCOV report, matching CI
 - `bench`: Bun runtime benchmark suite
 - `fmt` / `fmt:check`: dprint formatting
 - `lint` / `lint:fix`: Biome lint checks and safe fixes, configured in `biome.json`
 - `build`: declaration-only emit for editors and `tsc` consumers
 - `verify:toolchain`: check supported Bun versions and workflow/development pins
-- `verify:package`: check packed exports and declarations from a clean consumer
+- `verify:package`: check packed exports, declarations and documentation links from a clean consumer
 
 A [`justfile`](justfile) wraps the same commands: `just` (typecheck + test), `just ci`
 (toolchain, audit, formatting, lint, types, build, package verification and coverage), plus individual task recipes.
-GitHub uploads benchmark artifacts and prints coverage in the test logs. See the coverage upload limitation below.
+GitHub uploads benchmark and LCOV coverage artifacts and prints coverage in the test logs.
 dprint and its plugins are exact-pinned; installation leaves source untouched. See [CONTRIBUTING.md](CONTRIBUTING.md) for all checks.
 
 ### Pushing
@@ -175,12 +176,11 @@ Ubuntu and macOS; Windows is currently unsupported. It checks:
 - `bun run lint` (Biome lint check; warnings fail the check)
 - `bun run typecheck`
 - `bun run build` (declaration emit) and verification that `types/index.d.ts` and `types/links.d.ts` exist
-- `bun run verify:package`, checking packed imports and consumer types for both public entry points
-- `bun test --coverage`, printing a coverage summary
+- `bun run verify:package`, checking packed imports, consumer types and shipped documentation links
+- `bun run coverage`, printing a coverage summary and generating `coverage/lcov.info`
 
-The workflow has an upload step targeting `coverage/`, but no file coverage reporter is configured.
-The current test command produces console output rather than an uploadable coverage file.
-To generate a local file report, use `bun test --coverage --coverage-reporter=lcov` as described in
+The workflow checks that `coverage/lcov.info` is nonempty and fails if the coverage artifact is missing.
+To generate the same console and file reports locally, use `bun run coverage` as described in
 [Bun's coverage documentation](https://bun.com/docs/test/code-coverage).
 
 A second `benchmark` job runs only on `main`; it executes `bun run bench` and uploads the results as an artifact.
@@ -297,7 +297,7 @@ Generate a QR code.
   - `encoding`: Supported mode ('numeric' | 'alphanumeric' | 'byte'), automatically detected when omitted
   - `version`: Integer QR version `1`–`40`; the smallest fitting version is selected when omitted
   - `mask`: Integer pattern `0`–`7`; the lowest-penalty mask is selected when omitted
-  - `border`: Integer border width in modules, `0`–`1024` (default: `2`)
+  - `border`: Integer border width in modules, `0`–`1024` (default: `4`)
   - `scale`: Integer module scale, `1`–`1024` (default: `1`)
   - `optimize`: For SVG, use optimized path (default: true)
   - `text_encoder`: Custom string-to-bytes encoder, `(text: string) => Uint8Array` (default: UTF-8 via `TextEncoder`)
@@ -315,7 +315,7 @@ can still exceed this combined limit. SVG output has a `viewBox` but no explicit
 expands its geometry, while display size is controlled by the embedding page or the CLI's `--size`.
 This output limit does not bound input processing or custom encoder allocations; set input-size limits when handling untrusted payloads.
 
-The default border is two modules. Set `border: 4` for the four-module quiet zone described by
+The default border supplies the four-module quiet zone described by
 [DENSO WAVE](https://www.qrcode.com/en/howto/code.html); smaller borders need additional surrounding space.
 `kanji` and `eci` appear in the exported mode tuple/type but are rejected by the encoder.
 
@@ -369,8 +369,8 @@ And from `bun-qr/links`:
 All link encoding functions are available from `bun-qr/links`:
 
 > **Handling untrusted input:** helpers validate their documented fields and escape delimiters, including WiFi
-> separators and vCard/calendar line breaks. This is not a complete sanitizer: vCard/calendar free-text fields
-> do not reject every ASCII control character, and geo serialization has known format limitations.
+> separators and vCard/calendar line breaks. Free-text fields reject forbidden ASCII controls while allowing tabs
+> and escaped line breaks; geo values use RFC 5870 decimal syntax and `;u=` uncertainty parameters.
 > Validate input for the receiving application and handle errors. Details are in [LINK_ENCODING.md](docs/LINK_ENCODING.md).
 
 - **`encode_url(url, options?)`**: Format and validate URLs
@@ -393,7 +393,7 @@ All link encoding functions are available from `bun-qr/links`:
 
 - **`encode_geo(options)`**: Geographic coordinates
   - `latitude`, `longitude`, `altitude`, `uncertainty`
-  - Current uncertainty serialization uses `?u=`; strict RFC 5870 serialization is not implemented
+  - RFC 5870 decimal coordinates and optional `;u=` uncertainty in meters; no exponent notation
 
 - **`encode_calendar_event(options)`**: iCalendar events
   - `title`, `start`, `end`, `location`, `description`, `all_day`

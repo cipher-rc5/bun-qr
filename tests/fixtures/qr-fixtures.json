@@ -4,25 +4,25 @@
       "id": "ascii-hello-bun-qr",
       "input": "Hello, Bun QR!",
       "output": "ascii",
-      "expected": { "length": 338, "sha256": "a0dbf94fc04316982daf9f83221156e9c995b10b1b37f2883228f01027af3087" }
+      "expected": { "length": 450, "sha256": "a345ef9a9eac9379680bb3e172708e328da59e5f64a4dfd2b91cbbb9016e93e3" }
     },
     {
       "id": "ascii-url-bun",
       "input": "https://bun.com/",
       "output": "ascii",
-      "expected": { "length": 450, "sha256": "c1f1943e9f0aaebe26e0133b080b67852f239dc7151c87c332c0fe7ccdac7013" }
+      "expected": { "length": 578, "sha256": "fc985bd4c0a965a3b73022234f69f6c8c23752a739960b053de2aeb65d9fbf2f" }
     },
     {
       "id": "svg-url-bun",
       "input": "https://bun.com/",
       "output": "svg",
-      "expected": { "length": 4041, "sha256": "6b99c3811cf0497937ec3aaa47b714c89f542b4c6bab9036098b97cfa79dd051" }
+      "expected": { "length": 4069, "sha256": "5fb711bff22125034c080a480179b0a1a7bd6b03956c79256f35fe158a701cb0" }
     },
     {
       "id": "gif-url-bun",
       "input": "https://bun.com/",
       "output": "gif",
-      "expected": { "length": 170, "sha256": "032ead92b24382f13513ddc23db8ecbdc45219c99c1ff12939ce35bf61e3dff6" }
+      "expected": { "length": 184, "sha256": "43951202a25a1455f73f30ab5b864d5fd4291ce4cb51146b57ecec128f185d9f" }
     }
   ]
 }

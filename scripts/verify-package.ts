@@ -26,6 +26,26 @@ try {
   await create_directory(consumer);
   await Bun.write(child_path(consumer, 'package.json'), JSON.stringify({ name: 'consumer', type: 'module' }));
   await run([executable, 'add', '--offline', '--ignore-scripts', tarball], consumer);
+  const installed = new URL('./node_modules/bun-qr/', Bun.pathToFileURL(`${consumer}/`));
+  for (
+    const required of ['README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'justfile', 'docs/LINK_ENCODING.md', 'docs/RELEASE_VERIFICATION.md']
+  ) {
+    if (!await Bun.file(new URL(required, installed)).exists()) throw new Error(`Package documentation missing: ${required}`);
+  }
+  for (const path of new Bun.Glob('**/*.md').scanSync(Bun.fileURLToPath(installed))) {
+    const document = new URL(path, installed);
+    const text = await Bun.file(document).text();
+    for (const match of text.matchAll(/\]\(([^\s)]+)\)/g)) {
+      const target = match[1];
+      if (!target || target.startsWith('#') || /^[a-z][a-z\d+.-]*:/i.test(target)) continue;
+      const linked = new URL(target, document);
+      linked.hash = '';
+      if (!linked.href.startsWith(installed.href) || !await Bun.file(linked).exists()) {
+        throw new Error(`Broken package documentation link: ${path} -> ${target}`);
+      }
+    }
+  }
+  console.log('package documentation and relative links check cleanly');
   await Bun.write(
     child_path(consumer, 'check.ts'),
     `

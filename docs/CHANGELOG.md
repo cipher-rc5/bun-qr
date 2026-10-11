@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Geo URIs use RFC 5870 `;u=` parameters and round-trippable decimal notation without scientific exponents, including finite numeric extremes.
+- vCard and calendar text fields reject forbidden ASCII controls with field-specific errors while preserving tabs and escaped line breaks.
+- Explicit-version numeric/alphanumeric capacity and character-count overflow is rejected before splitting or allocating decoded symbol arrays.
+- CI and release coverage commands generate LCOV; checks require a nonempty file and artifact uploads fail when files are absent.
+- Package archives include linked documentation and the justfile; clean-consumer verification checks their presence and relative Markdown links.
 - GIF LZW width transitions now preserve decoded pixels; independent GIF/QR decoders cover width boundaries, dictionary resets, all QR versions, encoding modes, ECC levels and masks.
 - CLI writes use filesystem paths and atomic exclusive creation; URL metacharacters, existing links and competing writers cannot bypass overwrite protection.
 - Email addresses cannot inject mailto fields; valid local-part punctuation is percent-encoded.
@@ -25,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The default QR quiet zone is four modules in the library, bitmap helper and CLI. Default dimensions and rendered fixtures change; explicit `border: 2` retains compact output when surrounding clear space is provided.
 - CI tests Linux and macOS only; Windows is currently unsupported. Installation and contributor documentation state this platform policy.
 - Package exports resolve only for Bun, and public entry points require the Bun runtime. Development commands force Bun for Node-shebang tool wrappers, and GitHub Release creation uses the native GitHub CLI instead of a Node-based script action.
 - Automatic dependency install scripts are disabled; precompiled development tools initialize through their Bun-executed wrappers.
@@ -34,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Formatter plugins use pinned npm registry references: TypeScript 0.96.1, JSON 0.25.2, Markdown 0.26.0, TOML 0.9.0, and YAML 0.6.0. Registry references do not require the npm CLI.
 - `just ci` includes audit, toolchain and consumer package verification with coverage. Concrete presenter and executable CLI tests verify routing, colors, files and exit codes.
 - Tag releases verify consumer imports and declarations, produce signed GitHub/Sigstore provenance and publish the same checked/attested tarball. The release bundle and verification instructions are provided separately from npm registry provenance.
-- Documentation now describes actual defaults, option bounds, all-format CLI file output, and the current geo/control-character and console-only coverage limitations.
+- Documentation describes current defaults, option bounds, all-format CLI file output, geo/content-text contracts and file coverage reporting.
 
 ## [0.2.0] — unreleased
 

@@ -10,8 +10,9 @@ and refuses existing files or links. Development and release tooling installs pa
 A custom `text_encoder` is caller-provided code that receives raw input. Keep it a pure byte conversion.
 The general encoder accepts arbitrary text; HTTP/HTTPS restrictions apply to the URL helper and CLI, rather than all QR payloads.
 Helper validation does not establish that a URL, WiFi network, contact, or payment recipient is trustworthy.
-vCard/calendar free-text validation and geo serialization have current limits documented in
-[LINK_ENCODING.md](docs/LINK_ENCODING.md). Consumers should validate fields for their receiving application.
+vCard/calendar free text rejects forbidden ASCII controls, permits tabs and escapes line breaks. Geo values
+use decimal-only RFC 5870 syntax. See [LINK_ENCODING.md](docs/LINK_ENCODING.md) for the input contracts.
+Consumers should validate fields for their receiving application.
 
 Security issues relevant to this library include:
 

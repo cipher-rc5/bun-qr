@@ -60,14 +60,14 @@ Run it before opening a pull request. The individual steps:
 | Typecheck        | `just typecheck`        | `bunx --bun tsc --noEmit`                      |
 | Build (types)    | `just build`            | `bunx --bun tsc --project tsconfig.build.json` |
 | Test             | `just test`             | `bun test`                                     |
-| Coverage         | `just coverage`         | `bun test --coverage`                          |
+| Coverage         | `just coverage`         | `bun run coverage`                             |
 | Benchmarks       | `just bench`            | `bun run tests/benchmark.ts`                   |
 | Verify packaging | `just verify-package`   | `bun run build && bun run verify:package`      |
 | Clean artifacts  | `just clean`            | `rm -rf types dist coverage`                   |
 
 Running `just` with no arguments runs `typecheck` and `test`.
-GitHub prints coverage in the test logs and uploads benchmark artifacts. The configured coverage upload targets
-`coverage/`, but the current text reporter does not generate a file there. Release jobs check the tag/version match,
+GitHub prints coverage in the test logs and uploads benchmark and LCOV coverage artifacts. `bun run coverage`
+generates `coverage/lcov.info`; CI verifies a nonempty report and rejects missing uploads. Release jobs check the tag/version match,
 generate checksums and an SBOM, attest the tarball, then publish those same verified bytes.
 
 ## Formatting
@@ -102,6 +102,7 @@ bun test                          # everything
 bun test tests/links.test.ts      # a single file
 bun test --coverage               # console coverage summary
 bun test --coverage --coverage-reporter=lcov  # coverage/lcov.info
+bun run coverage                  # console summary and coverage/lcov.info, matching CI
 ```
 
 Please add tests for any behavior change. This is an encoding library, so the most valuable tests pin down exact
@@ -115,7 +116,7 @@ build artifact and should not be committed.
 
 ## Verifying the package
 
-`just verify-package` builds declarations, packs the tarball, and checks types and imports from a clean Bun consumer,
+`just verify-package` builds declarations, packs the tarball, and checks types, imports and shipped documentation links from a clean Bun consumer,
 catching broken `exports` maps and missing files. CI runs the same script on every OS; releases run it against the
 exact tarball that will be attested and published. Use `bun run verify:package path/to/package.tgz` to check an existing archive.
 Run it locally if you touch

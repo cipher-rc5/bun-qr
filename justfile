@@ -16,7 +16,7 @@ test:
     bun test
 
 coverage:
-    bun test --coverage
+    bun run coverage
 
 bench:
     bun run bench

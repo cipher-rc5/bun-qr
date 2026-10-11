@@ -83,22 +83,17 @@ export function encode_payload<TEncoding extends string, TVersion extends number
   const mode = info.mode_bits[type];
   const length_bits = info.length_bits(ver, type);
 
-  // Resolve the payload symbols (and the length field's value) before writing any bits,
-  // so the capacity check still happens before allocation-sensitive work.
+  // Numeric/alphanumeric symbols are single ASCII characters: measure their bit
+  // count before allocating split strings or decoded arrays. Byte mode requires
+  // the caller's encoded bytes to determine its actual length.
   let data_len = data.length;
   let symbols: number[] | undefined;
   let utf8: Uint8Array | undefined;
 
-  if (type === 'numeric') {
-    symbols = info.alphabet.numeric.decode(data.split(''));
-    data_len = symbols.length;
-  } else if (type === 'alphanumeric') {
-    symbols = info.alphabet.alphanumerc.decode(data.split(''));
-    data_len = symbols.length;
-  } else if (type === 'byte') {
+  if (type === 'byte') {
     utf8 = encoder(data);
     data_len = utf8.length;
-  } else {
+  } else if (type !== 'numeric' && type !== 'alphanumeric') {
     throw new Error('encode: unsupported type');
   }
 
@@ -109,7 +104,10 @@ export function encode_payload<TEncoding extends string, TVersion extends number
     data_len * 8;
 
   const total_bits = mode.length + length_bits + encoded_bits;
-  if (total_bits > capacity) throw new Error('Capacity overflow');
+  if (data_len >= 2 ** length_bits || total_bits > capacity) throw new Error('Capacity overflow');
+
+  if (type === 'numeric') symbols = info.alphabet.numeric.decode(data.split(''));
+  else if (type === 'alphanumeric') symbols = info.alphabet.alphanumerc.decode(data.split(''));
 
   const w = new BitWriter(capacity);
   w.push(Number(`0b${mode}`), mode.length);

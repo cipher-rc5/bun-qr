@@ -188,7 +188,10 @@ export type QrOpts = {
     | undefined,
   /** Plain number in range 1–40; validated internally before use */
   version?: number | undefined,
-  mask?: number | undefined,
+  mask?:
+    | number
+    | undefined,
+  /** Quiet-zone width in modules (default 4). Smaller values require surrounding clear space. */
   border?: number | undefined,
   scale?: number | undefined
 };
@@ -348,7 +351,7 @@ export function encode_qr(text: string, output: Output = 'raw', opts: QrOpts & S
   const data = encode(ver, ecc, text, encoding, encoder);
   let res = draw_qr_best(ver, ecc, data, opts.mask as Mask);
   res.assert_drawn();
-  const border = opts.border === undefined ? 2 : opts.border;
+  const border = opts.border === undefined ? 4 : opts.border;
   validate_border(border);
   res = res.border(border, false);
   if (opts.scale !== undefined) res = res.scale(opts.scale);

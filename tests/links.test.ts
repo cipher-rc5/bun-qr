@@ -315,7 +315,7 @@ describe('encode_geo', () => {
   });
 
   test('appends uncertainty as a parameter', () => {
-    expect(encode_geo({ latitude: 1, longitude: 2, uncertainty: 50 })).toBe('geo:1,2?u=50');
+    expect(encode_geo({ latitude: 1, longitude: 2, uncertainty: 50 })).toBe('geo:1,2;u=50');
   });
 
   test('accepts the boundary coordinates', () => {
@@ -362,7 +362,7 @@ describe('encode_geo', () => {
     });
 
     test('still accepts a zero uncertainty', () => {
-      expect(encode_geo({ latitude: 1, longitude: 2, uncertainty: 0 })).toBe('geo:1,2?u=0');
+      expect(encode_geo({ latitude: 1, longitude: 2, uncertainty: 0 })).toBe('geo:1,2;u=0');
     });
   });
 });

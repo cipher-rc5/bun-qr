@@ -96,7 +96,10 @@ jobs:
         run: bun run verify:package
 
       - name: Test with coverage
-        run: bun test --coverage
+        run: bun run coverage
+
+      - name: Verify coverage report
+        run: test -s coverage/lcov.info
 
       # Coverage is identical across the matrix; uploading from every leg would
       # collide on artifact name. Publish from the pinned Linux config only.
@@ -106,6 +109,7 @@ jobs:
         with:
           name: coverage-${{ github.run_id }}
           path: coverage/
+          if-no-files-found: error
           retention-days: 14
 
   # Deliberately single-config: a benchmark is a measurement, and results from

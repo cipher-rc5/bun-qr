@@ -287,7 +287,7 @@ export class Bitmap {
    * constructor and scale allocations, protecting every output format and direct
    * `Bitmap` users, regardless of what the caller checked.
    */
-  border(border = 2, value: DrawValue): Bitmap {
+  border(border = 4, value: DrawValue): Bitmap {
     if (!Number.isSafeInteger(border) || border < 0) {
       throw new Error(`invalid border: ${border}. Expected integer [0..${MAX_QR_PIXELS}]`);
     }

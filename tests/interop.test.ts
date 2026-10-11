@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { decompressFrames, parseGIF } from 'gifuct-js';
 import jsQR from 'jsqr';
+import { BunQrGenerator } from '../src/cli/qr-generator';
 import { Bitmap } from '../src/core/bitmap';
 import encode_qr, { EC_MODE, type Mask, type QrOpts, validate_version } from '../src/index';
 
@@ -56,7 +57,7 @@ describe('independent GIF decoding', () => {
 
   test('renders QR GIF pixels that independently decode to the input', () => {
     const input = 'https://bun.com/';
-    const options: QrOpts = { border: 4, scale: 4 };
+    const options: QrOpts = { scale: 4 };
     const frame = decoded_gif(encode_qr(input, 'gif', options));
     expect(frame.patch).toEqual(pixels(encode_qr(input, 'raw', options)));
     expect(jsQR(frame.patch, frame.dims.width, frame.dims.height)?.data).toBe(input);
@@ -64,11 +65,31 @@ describe('independent GIF decoding', () => {
 });
 
 function decode(input: string, options: QrOpts = {}) {
-  const rows = encode_qr(input, 'raw', { border: 4, scale: 3, ...options });
+  const rows = encode_qr(input, 'raw', { scale: 3, ...options });
   return jsQR(pixels(rows), rows.length, rows.length, { inversionAttempts: 'dontInvert' });
 }
 
 describe('independent QR payload decoding', () => {
+  test('decodes default library and CLI GIF output without border overrides', () => {
+    const input = 'https://bun.com/';
+    const generator = new BunQrGenerator();
+    for (const output of [encode_qr(input, 'gif'), generator.generate(input, 'gif')]) {
+      if (!(output instanceof Uint8Array)) throw new Error('Expected GIF bytes');
+      const frame = decoded_gif(output);
+      expect(frame.dims.width).toBe(33); // Version 2 (25) plus four modules on each side.
+      const rows = Array.from(
+        { length: frame.dims.height },
+        (_, y) => Array.from({ length: frame.dims.width }, (_, x) => frame.patch[(y * frame.dims.width + x) * 4] === 0)
+      );
+      const scaled = rows.flatMap(row => Array.from({ length: 4 }, () => row.flatMap(bit => [bit, bit, bit, bit])));
+      expect(jsQR(pixels(scaled), scaled.length, scaled.length)?.data).toBe(input);
+    }
+    expect(generator.generate('x', 'svg')).toContain('viewBox="0 0 29 29"');
+    const compact = encode_qr('x', 'raw', { border: 2 });
+    expect(compact.length).toBe(25);
+    expect(encode_qr('x').length).toBe(29);
+  });
+
   test.each([['low', 2953], ['medium', 2331], ['quartile', 1663], ['high', 1273]] as const)(
     'decodes full version-40 byte capacity at %s ECC',
     (ecc, capacity) => {

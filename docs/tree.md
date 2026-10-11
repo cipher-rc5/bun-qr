@@ -134,5 +134,5 @@ bun-qr/
 - CLI: `bun run qr -- https://bun.com --format svg --output bun.svg`
 
 Generated declarations (`types/`), package archives (`dist-artifacts/`), and file coverage reports (`coverage/`)
-are ignored artifacts. `bun test --coverage` prints text; add `--coverage-reporter=lcov` to produce `coverage/lcov.info`.
+are ignored artifacts. `bun run coverage` prints text and produces `coverage/lcov.info`, matching CI.
 `src/decode.ts` and `src/dom.ts` remain in the repository but are excluded from published package files.

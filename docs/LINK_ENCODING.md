@@ -98,7 +98,8 @@ const sms2 = encode_sms('+1-555-123-4567', { body: 'Thanks for scanning! Reply Y
 A vCard requires a display name: use `formatted_name`, personal name parts, or `organization` as a fallback.
 Empty or nameless cards throw. vCard 4.0 phone values use `tel:` URIs; content lines are UTF-8 folded at 75 octets and terminated with CRLF.
 Website fields follow the HTTP/HTTPS URL policy and are serialized as URIs; malformed URLs and embedded controls throw.
-Free-text fields escape backslashes, commas, semicolons, and line breaks, but do not reject all other ASCII controls.
+Free-text fields escape backslashes, commas, semicolons, and line breaks. All supplied fields reject ASCII controls
+except tabs and line breaks, including controls in names before whitespace trimming. Errors identify the affected field.
 Validate such fields before passing untrusted text to a scanner. `formatted_name` overrides the derived display name.
 
 ```typescript
@@ -153,9 +154,9 @@ const qr = encode_qr(wifi, 'svg', { ecc: 'high', border: 4 });
 Latitude must be finite and in `[-90, 90]`; longitude must be finite and in `[-180, 180]`.
 Altitude must be finite and uncertainty finite and nonnegative; both use meters.
 
-Current serialization uses `?u=` for uncertainty and JavaScript number formatting, which may emit exponent notation.
-[RFC 5870](https://www.rfc-editor.org/rfc/rfc5870.html#section-3.3) uses `;u=` and decimal-only coordinates.
-The example below records the current output, which strict geo URI consumers may reject. Full RFC 5870 serialization is pending.
+Serialization follows [RFC 5870](https://www.rfc-editor.org/rfc/rfc5870.html#section-3.3):
+uncertainty uses `;u=` and all numbers use decimal notation, including very small or large finite values.
+Numeric values round-trip without rounding; zero uncertainty is distinct from omitted uncertainty.
 
 ```typescript
 import { encode_geo } from 'bun-qr/links';
@@ -171,7 +172,7 @@ const location2 = encode_geo({
   altitude: 10, // meters
   uncertainty: 5 // meters
 });
-// Result: "geo:37.7749,-122.4194,10?u=5"
+// Result: "geo:37.7749,-122.4194,10;u=5"
 ```
 
 ### 8. Calendar Events
@@ -179,7 +180,7 @@ const location2 = encode_geo({
 This helper emits a VEVENT fragment for QR scanners, rather than a complete `.ics` calendar file.
 Dates are serialized in UTC with a four-digit year (0000–9999), timed values have second precision, and an optional end must be strictly later in the emitted format.
 All-day end dates are exclusive: use the next UTC day for a one-day event. Content lines use CRLF and UTF-8-safe folding.
-`all_day` defaults to `false`. Free-text fields escape delimiters and line breaks but do not reject all other ASCII controls.
+`all_day` defaults to `false`. Free-text fields reject forbidden ASCII controls, preserve tabs and escape delimiters and line breaks.
 The fragment does not include a VCALENDAR wrapper, UID, or DTSTAMP; use a calendar library when producing a complete calendar file.
 
 ```typescript
@@ -299,8 +300,8 @@ const raw = encode_qr(url, 'raw');
 
 ### Border and Scale
 
-The API defaults to `border: 2` and `scale: 1`. A QR quiet zone needs four modules on every side;
-use `border: 4` or provide the remaining clear space in the surrounding layout. See
+The API and CLI default to a four-module quiet zone (`border: 4`) and `scale: 1`.
+Explicit smaller library borders need additional clear space in the surrounding layout. See
 [DENSO WAVE's margin guidance](https://www.qrcode.com/en/howto/code.html).
 Border accepts integers `0`–`1024`, scale accepts integers `1`–`1024`, and the combined bitmap area
 must stay at or below `16_000_000` cells. Scaling expands the bitmap and SVG viewBox; SVG display size is controlled by its container.
@@ -371,8 +372,7 @@ Scanner support depends on the device, app, and payload type. Test with the inte
 compatibility matrix is currently maintained. QR payload and GIF pixel tests use independent development-only decoders.
 Those tests do not prove that a camera imports a contact, opens a calendar fragment, joins WiFi, or accepts a payment.
 
-Current limitations include geo uncertainty/exponent serialization, controls in vCard/calendar free text,
-and the two-module default QR border. The decoder and browser scaffolds are excluded from the published package.
+The decoder and browser scaffolds are excluded from the published package.
 
 ## Further Reading
 

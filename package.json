@@ -25,6 +25,9 @@
     "!types/dom.d.ts*",
     "README.md",
     "SECURITY.md",
+    "CONTRIBUTING.md",
+    "justfile",
+    "docs",
     "LICENSE",
     "LICENSE-MIT"
   ],
@@ -32,6 +35,7 @@
     "build": "bunx --bun tsc --project tsconfig.build.json",
     "typecheck": "bunx --bun tsc --noEmit",
     "test": "bun test",
+    "coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov",
     "qr": "bun run ./src/cli.ts",
     "bench": "bun run tests/benchmark.ts",
     "verify:toolchain": "bun run scripts/verify-toolchain.ts",

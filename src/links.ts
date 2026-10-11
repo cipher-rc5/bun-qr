@@ -112,6 +112,17 @@ function has_control_chars(str: string): boolean {
   return /[\x00-\x1f\x7f]/.test(str);
 }
 
+/** Content-line text permits tabs and escaped line breaks, but no other ASCII controls. */
+function assert_content_text(text: string, field: string): void {
+  if (typeof text !== 'string') throw new Error(`Invalid ${field}: expected text`);
+  for (const character of text) {
+    const code = character.charCodeAt(0);
+    if ((code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127) {
+      throw new Error(`Invalid ${field}: contains forbidden control characters`);
+    }
+  }
+}
+
 function escape_vcard(text: string): string {
   // RFC 6350 §3.2: every line break in a property value is escaped as "\n", regardless
   // of whether the source used CRLF, a bare CR, or a bare LF. CRLF must be collapsed
@@ -153,6 +164,21 @@ function assert_valid_date(date: Date, field: string): void {
 
 function format_iso_date(date: Date): string {
   return `${date.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
+}
+
+/** Expand the shortest round-trippable finite number spelling into RFC 5870 decimal grammar. */
+function geo_decimal(value: number): string {
+  const [significand = '', exponent] = Math.abs(value).toString().split('e');
+  if (exponent === undefined) return String(value);
+  const [whole = '', fraction = ''] = significand.split('.');
+  const digits = whole + fraction;
+  const point = whole.length + Number(exponent);
+  const decimal = point <= 0 ?
+    `0.${'0'.repeat(-point)}${digits}` :
+    point >= digits.length ?
+    digits + '0'.repeat(point - digits.length) :
+    `${digits.slice(0, point)}.${digits.slice(point)}`;
+  return value < 0 ? `-${decimal}` : decimal;
 }
 
 // URL encoding functions
@@ -285,6 +311,17 @@ export function encode_sms(phone: string, opts: SmsOptions = {}): string {
 export function encode_vcard(opts: VCardOptions): string {
   const lines: string[] = ['BEGIN:VCARD', 'VERSION:4.0'];
 
+  for (const field of ['formatted_name', 'first_name', 'last_name', 'organization', 'title', 'note'] as const) {
+    const text = opts[field];
+    if (text !== undefined) assert_content_text(text, `vCard ${field}`);
+  }
+  if (opts.address) {
+    for (const field of ['street', 'city', 'state', 'zip', 'country'] as const) {
+      const text = opts.address[field];
+      if (text !== undefined) assert_content_text(text, `vCard address.${field}`);
+    }
+  }
+
   if (opts.email && !validate_email(opts.email)) {
     throw new Error(`Invalid email in vCard: ${opts.email}`);
   }
@@ -415,25 +452,20 @@ export function encode_geo(opts: GeoOptions): string {
     throw new Error(`Invalid longitude: ${longitude}. Must be a finite number between -180 and 180`);
   }
 
-  let result = `geo:${latitude},${longitude}`;
+  let result = `geo:${geo_decimal(latitude)},${geo_decimal(longitude)}`;
 
   if (altitude !== undefined) {
     if (!Number.isFinite(altitude)) {
       throw new Error(`Invalid altitude: ${altitude}. Must be a finite number in meters`);
     }
-    result += `,${altitude}`;
+    result += `,${geo_decimal(altitude)}`;
   }
 
-  const params: string[] = [];
   if (uncertainty !== undefined) {
     if (!Number.isFinite(uncertainty) || uncertainty < 0) {
       throw new Error(`Invalid uncertainty: ${uncertainty}. Must be a finite non-negative number in meters`);
     }
-    params.push(`u=${uncertainty}`);
-  }
-
-  if (params.length > 0) {
-    result += `?${params.join('&')}`;
+    result += `;u=${geo_decimal(uncertainty)}`;
   }
 
   return result;
@@ -455,6 +487,10 @@ export function encode_geo(opts: GeoOptions): string {
  */
 export function encode_calendar_event(opts: CalendarEventOptions): string {
   const { title, start, end, location, description, all_day = false } = opts;
+
+  assert_content_text(title, 'calendar title');
+  if (location !== undefined) assert_content_text(location, 'calendar location');
+  if (description !== undefined) assert_content_text(description, 'calendar description');
 
   // Validate up front so both branches fail the same way instead of one throwing a raw
   // RangeError from toISOString and the other silently emitting an empty DTSTART.

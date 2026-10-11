@@ -55,7 +55,10 @@ jobs:
         run: bun run typecheck
 
       - name: Test
-        run: bun test --coverage
+        run: bun run coverage
+
+      - name: Verify coverage report
+        run: test -s coverage/lcov.info
 
       - name: Build (declaration emit)
         run: bun run build

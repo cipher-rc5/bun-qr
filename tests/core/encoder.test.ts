@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
+import { encode_payload, type EncodingInfo } from '../../src/core/encoder';
 import encode_qr, { _tests, validate_version } from '../../src/index';
 
 const { info, detect_type } = _tests;
@@ -98,9 +99,9 @@ describe('encoding modes produce scannable output', () => {
   });
 
   test('explicit version overrides auto-detection', () => {
-    // Version 5 = 37×37 modules + default border 2 → 41×41
+    // Version 5 = 37×37 modules + default border 4 → 45×45
     const result = encode_qr('hi', 'raw', { version: 5 });
-    expect((result as boolean[][])[0]!.length).toBe(41);
+    expect((result as boolean[][])[0]!.length).toBe(45);
   });
 
   test('explicit version with border:0 gives exact module dimensions', () => {
@@ -131,6 +132,60 @@ describe('info.capacity', () => {
 // ---------------------------------------------------------------------------
 
 describe('capacity overflow', () => {
+  test.each(['numeric', 'alphanumeric'] as const)(
+    'rejects oversized explicit %s input before splitting or decoding symbols',
+    (encoding) => {
+      const coder = encoding === 'numeric' ? info.alphabet.numeric : info.alphabet.alphanumerc;
+      const decode = spyOn(coder, 'decode');
+      const split = spyOn(String.prototype, 'split');
+      let error: unknown;
+      let splitCalls = 0;
+      let decodeCalls = 0;
+      try {
+        const payload = (encoding === 'numeric' ? '1' : 'A').repeat(1000);
+        try {
+          encode_qr(payload, 'raw', { version: 1, encoding });
+        } catch (caught) {
+          error = caught;
+        }
+        splitCalls = split.mock.calls.length;
+        decodeCalls = decode.mock.calls.length;
+      } finally {
+        split.mockRestore();
+        decode.mockRestore();
+      }
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe('Capacity overflow');
+      expect(splitCalls).toBe(0);
+      expect(decodeCalls).toBe(0);
+    }
+  );
+
+  test.each(['numeric', 'alphanumeric', 'byte'] as const)('rejects a %s count that cannot fit its length field', (encoding) => {
+    const coder = {
+      has: () => true,
+      decode: () => {
+        throw new Error('symbol allocation reached');
+      }
+    };
+    const narrow: EncodingInfo<typeof encoding, number, string> = {
+      alphabet: { numeric: coder, alphanumerc: coder },
+      length_bits: () => 2,
+      mode_bits: { numeric: '0001', alphanumeric: '0010', byte: '0100' },
+      capacity: () => ({ capacity: 512 })
+    };
+    expect(() => encode_payload(narrow, () => ({ encode: bytes => bytes }), 1, 'low', '1234', encoding, () => new Uint8Array(4))).toThrow(
+      'Capacity overflow'
+    );
+  });
+
+  test.each([['12x', 'numeric'], ['lowercase', 'alphanumeric']] as const)(
+    'still validates the alphabet of %s within capacity',
+    (payload, encoding) => {
+      expect(() => encode_qr(payload, 'raw', { version: 1, encoding })).toThrow(/Unknown letter/);
+    }
+  );
+
   test('payload too large for given version throws', () => {
     // Version 1 low ECC: 19 data bytes max
     // 20 digits → numeric mode needs more than 19 bytes
